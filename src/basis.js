@@ -26,7 +26,7 @@ export function landmarkToPoint(p,width,height) {
  * is visible. Uses anatomical proportions from reference geometry:
  * torso vertical span = 1.562 * shoulderWidth; hip width = 0.631 * shoulderWidth. */
 export function estimateHips(shoulderL, shoulderR, headPoint = null) {
-  if (!shoulderL || !shoulderR || ![...shoulderL, ...shoulderR].every(Number.isFinite)) return null;
+  if (!shoulderL || !shoulderR || !Array.isArray(shoulderL) || !Array.isArray(shoulderR) || ![...shoulderL, ...shoulderR].every(Number.isFinite)) return null;
   const shoulderVec = sub(shoulderL, shoulderR);
   const shoulderWidth = length(shoulderVec);
   if (shoulderWidth < EPS) return null;
@@ -34,7 +34,7 @@ export function estimateHips(shoulderL, shoulderR, headPoint = null) {
   const shoulderMid = midpoint(shoulderL, shoulderR);
   let down = null;
 
-  if (headPoint && headPoint.every(Number.isFinite)) {
+  if (headPoint && Array.isArray(headPoint) && headPoint.every(Number.isFinite)) {
     const neckVec = sub(shoulderMid, headPoint);
     const ortho = sub(neckVec, scale(shoulderVec, dot(neckVec, shoulderVec) / dot(shoulderVec, shoulderVec)));
     down = normalize(ortho);
@@ -57,6 +57,7 @@ export function estimateHips(shoulderL, shoulderR, headPoint = null) {
   };
 }
 export function torsoBasis(points) {
+  if (!points || typeof points !== 'object') return null;
   let p23 = points[23], p24 = points[24];
   if ((!p23 || !p24) && points[11] && points[12]) {
     const hips = estimateHips(points[11], points[12], points[0]);
@@ -96,7 +97,7 @@ export function transformPoint(matrix,p) {
   return [0,1,2].map(i=>matrix[i]*p[0]+matrix[i+4]*p[1]+matrix[i+8]*p[2]+matrix[i+12]);
 }
 export function segmentVisible(landmarks,ids,threshold=0.5) {
-  if (!landmarks) return false;
+  if (!landmarks || !ids || !Array.isArray(ids)) return false;
   return ids.every(i=>landmarks[i] && [landmarks[i].x,landmarks[i].y,landmarks[i].z].every(Number.isFinite) && (landmarks[i].visibility??1)>=threshold && (landmarks[i].presence??1)>=threshold);
 }
 /** True when a tracked hand is far larger than every arm segment the pose shows. A close-up of a hand

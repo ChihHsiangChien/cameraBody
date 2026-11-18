@@ -215,8 +215,9 @@ export function createBodyRenderer({settings:S,state,getSize,getHeadContext=()=>
         entry.name === 'organs_kidneys' ? S.organUrinary !== false : true
       );
       const selected=enabled&&!!S[entry.layer]&&organActive&&(!focus||focus.includes(rig))&&(!handFrame||layerShown(S,'hands'));
+      const isTorso = entry.frame === 'torso';
       const torsoVisible = segmentVisible(lms, [11, 12, 23, 24]) || segmentVisible(lms, [11, 12]);
-      const visibleCheck = entry.frame === 'torso' ? torsoVisible : segmentVisible(lms, ids);
+      const visibleCheck = isTorso ? torsoVisible : (Array.isArray(ids) && ids.length ? segmentVisible(lms, ids) : false);
       const tracked=selected&&(headFrame?!!headContext?.head.found:handFrame?!!getHandContext()?.rigs[rig.hand]?.group.visible:fresh&&visibleCheck&&(!entry.cervical||neckAligned));
       const basis=tracked?(ownFrame?HEAD_IDENTITY:basisFor(entry,smoothed,torso,hands)):null;
       const target=basis?1:0;
