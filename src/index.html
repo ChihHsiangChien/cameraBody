@@ -25,10 +25,15 @@
 <body>
   <main class="wrap">
     <header class="workspace-brand">
-      <svg class="brand-mark" viewBox="0 0 30 34" aria-hidden="true" focusable="false"><path d="M1 33V15a14 14 0 0 1 28 0v18zM15 1v32M1 17h28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <svg class="brand-mark" viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+        <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 2"/>
+        <circle cx="18" cy="18" r="10" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.4"/>
+        <path d="M18 5v26M5 18h26" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.6"/>
+        <circle cx="18" cy="18" r="4" fill="currentColor"/>
+      </svg>
       <div class="brand-name">
         <h1>3D anatomy camera</h1>
-        <p class="brand-caption">互動 3D 解剖相機</p>
+        <p class="brand-caption">智慧透視・多系統人體解剖相機</p>
       </div>
       <button id="language-toggle" type="button" lang="en" aria-label="Switch the interface to English">English</button>
     </header>
@@ -45,13 +50,13 @@
       <div id="intro" class="enter">
         <div class="intro-content">
           <h2>跟著你動的 3D 解剖模型</h2>
-          <p class="intro-description">開啟鏡頭後，參考模型會跟著你的頭、手與身體移動。可切換骨骼關節、肌肉、腦與神經。</p>
+          <p class="intro-description">開啟鏡頭後，人體解剖模型跟著你的頭、肩與身體移動；支援頭肩頸半身智慧推論與 9 大系統切換。</p>
           <div class="intro-actions">
             <button id="start" class="big" type="button">啟動鏡頭</button>
             <button id="demo-start" class="big secondary" type="button">先看示範</button>
           </div>
           <p id="intro-note">影像只在這部裝置處理，不會上傳。</p>
-          <p class="credit">製作：運動醫學科 吳易澄醫師</p>
+          <p class="credit">BodyVista Edition・由 Chien, ChihHsiang 擴充維護</p>
         </div>
         <div class="intro-pictures">
           <img class="intro-picture current" src="./intro-poster-bones.webp" width="900" height="600" alt="X 光外觀的頭骨與雙手骨骼 3D 模型" decoding="async">
@@ -165,13 +170,19 @@
             <label class="ck"><input id="L_outline" type="checkbox"><i style="background:#6fb6ff" aria-hidden="true"></i>頭部輪廓</label>
             <label class="ck"><input id="L_hands" type="checkbox"><i style="background:#d9f0ff" aria-hidden="true"></i>手骨</label>
             <label class="ck"><input id="L_spine" type="checkbox"><i style="background:#bfe3ff" aria-hidden="true"></i>軀幹骨架</label>
-            <label class="ck"><input id="L_organs" type="checkbox"><i style="background:#ff9fc0" aria-hidden="true"></i>胸腹內臟（總開關）</label>
-            <label class="ck" style="margin-left: 14px;"><input id="L_organHeart" type="checkbox"><i style="background:#f27a7c" aria-hidden="true"></i>心臟（心血管系統）</label>
-            <label class="ck" style="margin-left: 14px;"><input id="L_organLungs" type="checkbox"><i style="background:#86bfd7" aria-hidden="true"></i>肺臟（呼吸系統）</label>
-            <label class="ck" style="margin-left: 14px;"><input id="L_organDigestive" type="checkbox"><i style="background:#e6aa85" aria-hidden="true"></i>胃・肝・腸（消化系統）</label>
-            <label class="ck" style="margin-left: 14px;"><input id="L_organUrinary" type="checkbox"><i style="background:#c180a0" aria-hidden="true"></i>腎臟（泌尿系統）</label>
+            <label class="ck"><input id="L_organs" type="checkbox"><i style="background:#ff9fc0" aria-hidden="true"></i>胸腹內臟</label>
             <label class="ck"><input id="L_arms" type="checkbox"><i style="background:#d9f0ff" aria-hidden="true"></i>上肢骨</label>
             <label class="ck"><input id="L_legs" type="checkbox"><i style="background:#d9f0ff" aria-hidden="true"></i>下肢骨</label>
+          </div>
+        </section>
+
+        <section aria-labelledby="organs-subheading" class="organs-subsystem-section">
+          <h4 id="organs-subheading">胸腹內臟系統細分</h4>
+          <div class="checks" role="group" aria-labelledby="organs-subheading">
+            <label class="ck"><input id="L_organHeart" type="checkbox"><i style="background:#f27a7c" aria-hidden="true"></i>心臟（心血管系統）</label>
+            <label class="ck"><input id="L_organLungs" type="checkbox"><i style="background:#86bfd7" aria-hidden="true"></i>肺臟（呼吸系統）</label>
+            <label class="ck"><input id="L_organDigestive" type="checkbox"><i style="background:#e6aa85" aria-hidden="true"></i>胃・肝・腸（消化系統）</label>
+            <label class="ck"><input id="L_organUrinary" type="checkbox"><i style="background:#c180a0" aria-hidden="true"></i>腎臟（泌尿系統）</label>
           </div>
         </section>
 
@@ -212,7 +223,7 @@
         <section class="panel credits" aria-labelledby="credits-heading">
           <h3 id="credits-heading">製作與資料來源</h3>
           <p>製作：運動醫學科 吳易澄醫師（<a href="https://sportsmedicine.tw/" target="_blank" rel="noopener">sportsmedicine.tw</a>）</p>
-          <p>原始碼公開於 GitHub：<a href="https://github.com/keanu77/3D_anatomy_camera" target="_blank" rel="noopener">keanu77/3D_anatomy_camera</a></p>
+          <p>原始碼公開於 GitHub：<a href="https://github.com/ChihHsiangChien/cameraBody" target="_blank" rel="noopener">ChihHsiangChien/cameraBody</a></p>
           <ul>
             <li>構想受 Hashem Al-Ghaili 的 X-Ray Mirror 啟發，本專案的程式與資料為獨立製作</li>
             <li>骨骼、肌肉、關節韌帶、內臟、腦與視覺路徑：BodyParts3D，日本生命科學資料庫中心（DBCLS），CC BY-SA 2.1 Japan</li>

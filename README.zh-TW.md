@@ -1,19 +1,28 @@
-# 3D anatomy camera
+# BodyVista 3D (3D Anatomy Camera - BodyVista Edition)
 
-[English](README.md) · [**線上使用**](https://3danatomycamera.sportsmedicine.tw/) · [**不開相機先看示範**](https://3danatomycamera.sportsmedicine.tw/#demo) · [版本變更](CHANGELOG.md)
+[English](README.md) · [**GitHub Pages 線上使用**](https://chihhsiangchien.github.io/cameraBody/) · [**不開相機先看示範**](https://chihhsiangchien.github.io/cameraBody/#demo) · [版本變更](CHANGELOG.md)
 
-把鏡頭對著自己，3D 骨骼、肌肉與神經會跟著你的頭、手和身體動。這是解剖學習工具，影像只在你的裝置上處理，不會上傳。
+把鏡頭對著自己，3D 骨骼、內臟器官、肌肉與神經會即時跟著你的頭、手和身體動作。這是具備隱私保護與智慧推論的解剖學習工具，影像與姿態點位全程只在你的裝置上處理，絕不上傳。
 
-![3D anatomy camera 示範](docs/demo.gif)
+![BodyVista 3D anatomy camera 示範](docs/demo.gif)
 
-在攝影機畫面上探索三大系統：**骨骼與關節、肌肉、神經與感覺器官**。既有器官圖層仍可單獨開啟。使用 Three.js 與 MediaPipe Tasks Vision，所有影像及 landmark 都在瀏覽器內處理；沒有影像上傳、analytics 或第三方執行期請求。
+## 本專案特色與獨立改版
 
-- 網站：<https://3danatomycamera.sportsmedicine.tw/>
-- 原始碼：<https://github.com/keanu77/3D_anatomy_camera>（公開 repository）
-- 構想受 Hashem Al-Ghaili 的 X-Ray Mirror 啟發，本專案的程式與資料為獨立製作（[原貼文](https://x.com/HashemGhaili/status/2120202746121085321)）。
-- 獨立重建與驗證紀錄：`NOTES.rebuild.md`；繪製設計：`NOTES.rendering.md`。
+1. **頭肩頸半身智慧推論 (Half-Body & Upper-Body Extrapolation)**：
+   - 解決以往鏡頭必須完整拍攝到骨盆/臀部（Hips 23, 24 節點）才能繪製軀幹的限制。
+   - 只要畫面拍到**頭部、頸部與雙肩**，系統便會根據解剖學參考幾何比例（胸寬與軀幹長度黃金比例）自動外推軀幹座標系，即時呈現上半身脊椎、肋骨籠、心臟、肺臟與胸背肌群。
+2. **BodyVista 9 大醫學系統獨立面板**：
+   - 整合 FreedomAI BodyVista 體系，支援骨骼、肌肉、心血管、呼吸、消化、泌尿、神經、感覺器官與體表輪廓等多系統自由開關與 Solo 獨占聚焦。
+3. **全新 Cyber-Medical 曜石黑與全像藍風格**：
+   - 全新視覺識別、自訂品牌標誌、毛玻璃懸浮 Dock 與現代化操作介面。
 
-製作：運動醫學科 吳易澄醫師（<https://sportsmedicine.tw/>）。資料來源與授權列在網站的「製作與資料來源」與 `LICENSES/`。
+- 線上體驗：<https://chihhsiangchien.github.io/cameraBody/>
+- 專案儲存庫：<https://github.com/ChihHsiangChien/cameraBody>
+- 維護與改版：Chien, ChihHsiang
+- 核心衍生致謝：
+  - [3D Anatomy Camera](https://github.com/keanu77/3D_anatomy_camera)（運動醫學科 吳易澄醫師，MIT License）
+  - [BodyVista](https://github.com/FreedomIntelligence/BodyVista)（FreedomAI 開源社群，MIT License）
+  - 構想受 Hashem Al-Ghaili 的 X-Ray Mirror 啟發。
 
 這是解剖教育工具。模型來自參考成人資料，不是使用者的掃描影像，也不代表個人的器官位置或精確關節中心，不用於診斷。
 

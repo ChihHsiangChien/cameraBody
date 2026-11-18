@@ -22,9 +22,51 @@ export function makeBasis(x,y,z,o) {
 export function landmarkToPoint(p,width,height) {
   return [p.x*width,(1-p.y)*height,-p.z*width];
 }
+/** Extrapolates hip joint locations (landmarks 23, 24) when only the upper body (head, neck, shoulders)
+ * is visible. Uses anatomical proportions from reference geometry:
+ * torso vertical span = 1.562 * shoulderWidth; hip width = 0.631 * shoulderWidth. */
+export function estimateHips(shoulderL, shoulderR, headPoint = null) {
+  if (!shoulderL || !shoulderR || ![...shoulderL, ...shoulderR].every(Number.isFinite)) return null;
+  const shoulderVec = sub(shoulderL, shoulderR);
+  const shoulderWidth = length(shoulderVec);
+  if (shoulderWidth < EPS) return null;
+
+  const shoulderMid = midpoint(shoulderL, shoulderR);
+  let down = null;
+
+  if (headPoint && headPoint.every(Number.isFinite)) {
+    const neckVec = sub(shoulderMid, headPoint);
+    const ortho = sub(neckVec, scale(shoulderVec, dot(neckVec, shoulderVec) / dot(shoulderVec, shoulderVec)));
+    down = normalize(ortho);
+    if (down && down[1] > 0) down = scale(down, -1);
+  }
+
+  if (!down) {
+    const ortho = sub([0, -1, 0], scale(shoulderVec, dot([0, -1, 0], shoulderVec) / dot(shoulderVec, shoulderVec)));
+    down = normalize(ortho) ?? [0, -1, 0];
+  }
+
+  const torsoLength = shoulderWidth * 1.562;
+  const hipMid = add(shoulderMid, scale(down, torsoLength));
+  const shoulderDir = normalize(shoulderVec);
+  const halfHipWidth = shoulderWidth * 0.631 * 0.5;
+
+  return {
+    23: add(hipMid, scale(shoulderDir, halfHipWidth)),
+    24: sub(hipMid, scale(shoulderDir, halfHipWidth)),
+  };
+}
 export function torsoBasis(points) {
-  if (![11,12,23,24].every(i=>points[i])) return null;
-  const origin=midpoint(points[23],points[24]);
+  let p23 = points[23], p24 = points[24];
+  if ((!p23 || !p24) && points[11] && points[12]) {
+    const hips = estimateHips(points[11], points[12], points[0]);
+    if (hips) {
+      p23 = hips[23];
+      p24 = hips[24];
+    }
+  }
+  if (!points[11] || !points[12] || !p23 || !p24) return null;
+  const origin=midpoint(p23,p24);
   const x=sub(points[11],points[12]);
   const y=sub(midpoint(points[11],points[12]),origin);
   const n=normalize(cross(x,y));
@@ -54,6 +96,7 @@ export function transformPoint(matrix,p) {
   return [0,1,2].map(i=>matrix[i]*p[0]+matrix[i+4]*p[1]+matrix[i+8]*p[2]+matrix[i+12]);
 }
 export function segmentVisible(landmarks,ids,threshold=0.5) {
+  if (!landmarks) return false;
   return ids.every(i=>landmarks[i] && [landmarks[i].x,landmarks[i].y,landmarks[i].z].every(Number.isFinite) && (landmarks[i].visibility??1)>=threshold && (landmarks[i].presence??1)>=threshold);
 }
 /** True when a tracked hand is far larger than every arm segment the pose shows. A close-up of a hand

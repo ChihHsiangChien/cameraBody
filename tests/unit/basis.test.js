@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { boneBasis, footBasis, torsoBasis, transformPoint, landmarkToPoint, segmentVisible, palmNormal } from '../../src/basis.js';
+import { boneBasis, footBasis, torsoBasis, transformPoint, landmarkToPoint, segmentVisible, palmNormal, estimateHips } from '../../src/basis.js';
 
 function close(actual, expected) {
   actual.forEach((value, i) => expect(value).toBeCloseTo(expected[i], 8));
@@ -69,5 +69,21 @@ describe('anatomical reference frames', () => {
     expect(palmNormal([0, 0, 0], [0, 1, 0], [0, 2, 0], 'L')).toBeNull();
     expect(palmNormal([0, 0, 0], [NaN, 1, 0], [1, 0, 0], 'R')).toBeNull();
     expect(palmNormal([0, 0, 0], [0, 1, 0], [1, 0, 0], 'unknown')).toBeNull();
+  });
+  test('extrapolates hips and torso frame when only upper body (shoulders and head) is visible', () => {
+    const p11 = [150, 200, 0], p12 = [50, 200, 0], head = [100, 260, 0];
+    const hips = estimateHips(p11, p12, head);
+    expect(hips).not.toBeNull();
+    expect(hips[23][1]).toBeCloseTo(200 - 100 * 1.562, 1);
+    expect(hips[24][1]).toBeCloseTo(200 - 100 * 1.562, 1);
+    expect(hips[23][0]).toBeGreaterThan(hips[24][0]);
+
+    const upperOnly = [];
+    upperOnly[11] = p11;
+    upperOnly[12] = p12;
+    upperOnly[0] = head;
+    const basis = torsoBasis(upperOnly);
+    expect(basis).not.toBeNull();
+    expect(basis.every(Number.isFinite)).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import { layerShown } from './regions.js';
 import * as THREE from 'three';
-import {landmarkToPoint,torsoBasis,boneBasis,footBasis,segmentVisible,transformPoint,palmNormal,poseContradictsHands} from './basis.js';
+import {landmarkToPoint,torsoBasis,boneBasis,footBasis,segmentVisible,transformPoint,palmNormal,poseContradictsHands,estimateHips} from './basis.js';
 import {createPointFilter} from './one-euro.js';
 import { PALETTE as COLORS, ORGAN_COLORS, SOLID, GAINS, BASE_LIGHT, SURFACE, solidGain } from './render-style.js';
 
@@ -181,6 +181,13 @@ export function createBodyRenderer({settings:S,state,getSize,getHeadContext=()=>
         const next=landmarkToPoint(p,width,height);
         return next.every(Number.isFinite)?next:smoothed?.[i]??[0,0,0];
       });
+      if (segmentVisible(lms, [11, 12]) && (!segmentVisible(lms, [23]) || !segmentVisible(lms, [24]))) {
+        const hips = estimateHips(raw[11], raw[12], raw[0]);
+        if (hips) {
+          raw[23] = hips[23];
+          raw[24] = hips[24];
+        }
+      }
       // Tracker noise is a few pixels at any stage size; speeds are compared on a 640-pixel reference.
       smoothed=poseFilter.filter(raw,fresh?0:(now-lastSeen)/1000,640/Math.min(width,height));
       lastSeen=now;
@@ -208,7 +215,9 @@ export function createBodyRenderer({settings:S,state,getSize,getHeadContext=()=>
         entry.name === 'organs_kidneys' ? S.organUrinary !== false : true
       );
       const selected=enabled&&!!S[entry.layer]&&organActive&&(!focus||focus.includes(rig))&&(!handFrame||layerShown(S,'hands'));
-      const tracked=selected&&(headFrame?!!headContext?.head.found:handFrame?!!getHandContext()?.rigs[rig.hand]?.group.visible:fresh&&segmentVisible(lms,ids)&&(!entry.cervical||neckAligned));
+      const torsoVisible = segmentVisible(lms, [11, 12, 23, 24]) || segmentVisible(lms, [11, 12]);
+      const visibleCheck = entry.frame === 'torso' ? torsoVisible : segmentVisible(lms, ids);
+      const tracked=selected&&(headFrame?!!headContext?.head.found:handFrame?!!getHandContext()?.rigs[rig.hand]?.group.visible:fresh&&visibleCheck&&(!entry.cervical||neckAligned));
       const basis=tracked?(ownFrame?HEAD_IDENTITY:basisFor(entry,smoothed,torso,hands)):null;
       const target=basis?1:0;
       rig.alpha=instant?target:target?Math.min(1,rig.alpha+elapsed/100):Math.max(0,rig.alpha-elapsed/150);
