@@ -3,6 +3,7 @@ import { regionById, layerShown } from './regions.js';
 import { createCamera } from './camera.js';
 import { createTrackers } from './trackers.js';
 import { bindUI } from './ui.js';
+import { createSystemsUI } from './ui-systems.js';
 import { demoStageAspect } from './demo-pose.js';
 import { bindIntroPictures } from './intro-pictures.js';
 import { resolveLanguage, setLanguage, getLanguage, translateDocument, t } from './i18n.js';
@@ -22,6 +23,16 @@ let autoAt = 0, lowChecks = 0, lastFrameAt = 0;
 // What the tracking session was last prepared for, and when; see changed().
 let preparedFor = null, preparedAt = 0;
 const ui = bindUI({ settings, onChange: changed, onStart: start, onDemo: demo, onSwitch: switchCamera, onStop: stop });
+const systemsUI = createSystemsUI({
+  stage: $('stage'),
+  settings,
+  onChange: changed,
+  onSnap: () => setPaused(!state.paused),
+  onOrbitToggle: () => setPaused(!state.paused),
+  isFrozen: () => state.paused,
+  isOrbitMode: () => state.paused,
+});
+systemsUI.dock.hidden = true;
 const trackers = createTrackers({ onStatus: text => ui.status(t(text), '', true) });
 const camera = createCamera({ video, onChange: value => {
   state.mirror = value.mirror;
@@ -35,7 +46,7 @@ const introPictures = bindIntroPictures({ pictures: [...document.querySelectorAl
 // The pictures turn over only while the start screen is the thing being looked at.
 function syncIntroPictures() { if (state.mode === 'intro' && !document.hidden) introPictures.start(); else introPictures.stop(); }
 // The entrance plays for the first visit to the start screen only, never again after a session.
-function showIntro(visible) { $('intro').hidden = !visible; if (!visible) $('intro').classList.remove('enter'); syncIntroPictures(); }
+function showIntro(visible) { $('intro').hidden = !visible; if (!visible) $('intro').classList.remove('enter'); if (systemsUI) systemsUI.dock.hidden = visible; syncIntroPictures(); }
 function bodyOn() { return BODY_LAYERS.some(key => settings[key]); }
 function syncDemoAspect() {
   if (state.mode !== 'demo') return;
@@ -91,6 +102,7 @@ function setPaused(value) {
     else { freezeFrame = false; lastVideoTime = -1; autoAt = performance.now(); lowChecks = 0; video.play().catch(() => {}); }
   }
   if (paused) ui.status(t('畫面已暫停：拖曳可旋轉，雙指或滾輪可縮放，點一下可點選構造，雙擊還原；按「繼續」恢復。'), 'ok', true);
+  systemsUI?.sync();
   schedule();
 }
 function schedule() { if (!raf && !document.hidden && state.mode !== 'intro' && (!state.paused || freezeFrame)) raf = requestAnimationFrame(tick); }
@@ -161,6 +173,7 @@ async function changed({ throwOnError = false, force = false } = {}) {
   try {
     await task;
     syncDemoAspect();
+    systemsUI?.sync();
     if (state.paused) scene?.refresh();
     else if (state.mode === 'demo') scene?.demo(performance.now(), { still: has('still'), body: bodyOn() });
     schedule();

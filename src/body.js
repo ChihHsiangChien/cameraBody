@@ -201,7 +201,13 @@ export function createBodyRenderer({settings:S,state,getSize,getHeadContext=()=>
       // A hand-frame mesh is a child of a hand rig piece: it needs no pose, only that hand being shown.
       const handFrame=entry.frame==='hand',ownFrame=headFrame||handFrame;
       const ids=entry.frame==='torso'?[11,12,23,24]:entry.landmarks;
-      const selected=enabled&&!!S[entry.layer]&&(!focus||focus.includes(rig))&&(!handFrame||layerShown(S,'hands'));
+      const organActive = entry.layer !== 'organs' || (
+        entry.name === 'organs_heart' ? S.organHeart !== false :
+        entry.name === 'organs_lungs' ? S.organLungs !== false :
+        (entry.name === 'organs_liver' || entry.name === 'organs_stomach' || entry.name === 'organs_intestine') ? S.organDigestive !== false :
+        entry.name === 'organs_kidneys' ? S.organUrinary !== false : true
+      );
+      const selected=enabled&&!!S[entry.layer]&&organActive&&(!focus||focus.includes(rig))&&(!handFrame||layerShown(S,'hands'));
       const tracked=selected&&(headFrame?!!headContext?.head.found:handFrame?!!getHandContext()?.rigs[rig.hand]?.group.visible:fresh&&segmentVisible(lms,ids)&&(!entry.cervical||neckAligned));
       const basis=tracked?(ownFrame?HEAD_IDENTITY:basisFor(entry,smoothed,torso,hands)):null;
       const target=basis?1:0;

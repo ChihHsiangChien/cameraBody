@@ -2,6 +2,7 @@ import { FOCUS_IDS, FOCUS_SIDES, regionById } from './regions.js';
 export const DEFAULTS = Object.freeze({
   skull: true, brain: false, muscles: false, eyes: true, outline: true, hands: true,
   spine: false, organs: false, arms: false, legs: false, bodyMuscles: false, joints: false, nerves: false, peripheralNerves: false,
+  organHeart: true, organLungs: true, organDigestive: true, organUrinary: true,
   style: 'xray', bright: 1, real: 0.12, feather: 0.2, reveal: 'whole', cut: 0.5,
   showdata: false, fs: 1, fw: 1, fh: 1, fd: 1, fx: 0, fy: 0, fz: 0, labels: false, labelLanguage: 'zh',
   performance: 'auto', focus: 'none', focusSide: 'both', focusZoom: true, language: 'auto',

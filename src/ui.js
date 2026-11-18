@@ -21,6 +21,9 @@ export function bindUI({ settings, onChange, onStart, onDemo, onSwitch, onStop }
   }
   function sync() {
     for (const key of LAYERS) $(`L_${key}`).checked = settings[key];
+    for (const key of ['organHeart', 'organLungs', 'organDigestive', 'organUrinary']) {
+      const el = $(`L_${key}`); if (el) el.checked = settings[key] !== false;
+    }
     for (const key of Object.keys(RANGES)) $(key).value = settings[key];
     for (const key of ['labels', 'showdata', 'focusZoom']) $(key).checked = settings[key];
     for (const key of ['reveal', 'performance', 'labelLanguage']) $(key).value = settings[key];
@@ -61,6 +64,10 @@ export function bindUI({ settings, onChange, onStart, onDemo, onSwitch, onStop }
   for (const key of [...LAYERS, 'labels', 'showdata', 'focusZoom']) {
     const input = $(LAYERS.includes(key) ? `L_${key}` : key);
     input.addEventListener('change', () => { settings[key] = input.checked; changed(); });
+  }
+  for (const key of ['organHeart', 'organLungs', 'organDigestive', 'organUrinary']) {
+    const input = $(`L_${key}`);
+    if (input) input.addEventListener('change', () => { settings[key] = input.checked; changed(); });
   }
   for (const key of Object.keys(RANGES)) $(key).addEventListener('input', e => { settings[key] = Number(e.target.value); changed(); });
   for (const key of ['reveal', 'performance', 'labelLanguage']) $(key).addEventListener('change', e => { settings[key] = e.target.value; if (key === 'reveal') settings.cut = 0.5; changed(); });

@@ -1,5 +1,6 @@
 import { formatAnatomyName } from './anatomy-names.js';
 import { FIELDS, sourceUrl } from './structure-info.js';
+import { systemForPart } from './systems.js';
 import { t, getLanguage } from './i18n.js';
 import './inspection.css';
 
@@ -122,7 +123,9 @@ export function createInspectionUI({ stage, onEnable = () => {}, onChoose = () =
     const selectedIndex = Number.isInteger(value.selectedIndex) && value.selectedIndex >= 0 && value.selectedIndex < parts.length ? value.selectedIndex : 0;
     selection = { parts: [...parts], selectedIndex };
     const part = parts[selectedIndex], name = displayName(part);
-    classification.textContent = `${name.kindLabel} · ${name.sideLabel}`;
+    const sys = systemForPart(part);
+    const sysPrefix = sys ? `${sys.icon} ${getLanguage() === 'en' ? sys.nameEn : sys.nameZh} · ` : '';
+    classification.textContent = `${sysPrefix}${name.kindLabel} · ${name.sideLabel}`;
     title.textContent = name.title;
     english.textContent = name.english; english.hidden = !name.english || name.title === name.english;
     detail.textContent = name.detail || ''; detail.hidden = !name.detail;

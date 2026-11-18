@@ -1,6 +1,8 @@
 The MIT License
 
-Copyright (c) 2026 吳易澄
+This software combines and adapts works from:
+- 3D Anatomy Camera: Copyright (c) 2026 吳易澄 (https://github.com/keanu77/3D_anatomy_camera)
+- BodyVista: Copyright (c) 2026 FreedomAI (https://github.com/FreedomIntelligence/BodyVista)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
