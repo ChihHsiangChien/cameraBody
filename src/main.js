@@ -126,7 +126,7 @@ if (inspectorHideBtn) {
 function renderStructureHierarchy(pageId) {
   const structureListContainer = document.getElementById('structure-hierarchy');
   if (!structureListContainer) return;
-  structureListContainer.innerHTML = '';
+  structureListContainer.replaceChildren();
 
   const pageConfig = SYSTEM_PAGES[pageId] || SYSTEM_PAGES.nervous;
   const categories = pageConfig.categories;
@@ -148,7 +148,13 @@ function renderStructureHierarchy(pageId) {
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'category-title';
-    titleDiv.innerHTML = `<span class="cat-icon">${cat.icon || '●'}</span> <span class="cat-name">${currentLang === 'en' ? cat.nameEn : cat.nameZh}</span>`;
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'cat-icon';
+    iconSpan.textContent = cat.icon || '●';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'cat-name';
+    nameSpan.textContent = currentLang === 'en' ? cat.nameEn : cat.nameZh;
+    titleDiv.append(iconSpan, document.createTextNode(' '), nameSpan);
 
     const groupActions = document.createElement('div');
     groupActions.className = 'group-actions';
@@ -236,7 +242,7 @@ function renderStructureHierarchy(pageId) {
   }
 }
 
-function updatePageUI(pageId, updateHistory = true) {
+function updatePageUI(pageId, historyMode = 'replace') {
   const pageConfig = SYSTEM_PAGES[pageId] || SYSTEM_PAGES.nervous;
   currentPageId = pageConfig.meta.id;
 
@@ -244,8 +250,15 @@ function updatePageUI(pageId, updateHistory = true) {
   document.querySelectorAll('.system-page-tab').forEach(tab => {
     const tabPage = tab.getAttribute('data-system-page');
     const isActive = tabPage === currentPageId;
+    if (tabPage) {
+      tab.setAttribute('href', currentLang === 'en' ? `?page=${tabPage}&lang=en` : `?page=${tabPage}`);
+    }
     tab.classList.toggle('active', isActive);
-    tab.setAttribute('aria-current', isActive ? 'page' : 'false');
+    if (isActive) {
+      tab.setAttribute('aria-current', 'page');
+    } else {
+      tab.removeAttribute('aria-current');
+    }
   });
 
   // Update Brand Main Title and Subtitle
@@ -297,24 +310,41 @@ function updatePageUI(pageId, updateHistory = true) {
   if (searchInput) searchInput.value = '';
 
   // Update URL query ?page=<pageId>
-  if (updateHistory && typeof history.replaceState === 'function') {
+  if (historyMode) {
     const url = new URL(location.href);
     url.searchParams.set('page', currentPageId);
-    history.replaceState({ page: currentPageId }, '', url.toString());
+    if (historyMode === 'push' && typeof history.pushState === 'function') {
+      history.pushState({ page: currentPageId }, '', url.toString());
+    } else if (historyMode === 'replace' && typeof history.replaceState === 'function') {
+      history.replaceState({ page: currentPageId }, '', url.toString());
+    }
   }
 }
 
 // Initial UI render
-updatePageUI(currentPageId, true);
+updatePageUI(currentPageId, 'replace');
 
 // Dedicated System Page Switcher Tabs
 document.querySelectorAll('.system-page-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
+  tab.addEventListener('click', e => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
     const targetPage = tab.getAttribute('data-system-page');
     if (!targetPage || targetPage === currentPageId) return;
     viewer.setSystemPage(targetPage);
-    updatePageUI(targetPage, true);
+    updatePageUI(targetPage, 'push');
   });
+});
+
+// Sync UI on browser Back/Forward navigation
+window.addEventListener('popstate', () => {
+  const q = new URLSearchParams(location.search);
+  const h = new URLSearchParams(location.hash.slice(1));
+  const nextReq = q.get('page') || h.get('page') || 'nervous';
+  const nextPage = SYSTEM_PAGES[nextReq] ? nextReq : 'nervous';
+  if (nextPage === currentPageId) return;
+  viewer.setSystemPage(nextPage);
+  updatePageUI(nextPage, false);
 });
 
 // Search Filter

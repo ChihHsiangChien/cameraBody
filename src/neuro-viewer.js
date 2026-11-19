@@ -1232,7 +1232,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
       renderer.dispose();
-      container.innerHTML = '';
+      container.replaceChildren();
     },
   };
 }

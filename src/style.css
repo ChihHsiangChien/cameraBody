@@ -193,6 +193,10 @@ ul { list-style: none; }
 }
 
 .system-page-tab {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  cursor: pointer;
   font-size: var(--t-small);
   font-weight: 500;
   padding: 6px 14px;
