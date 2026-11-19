@@ -49,17 +49,26 @@ describe('3D Nervous System & Skeleton builder verification', () => {
     expect(nervesGeos.optic_nerve_R.attributes.position.count).toBeGreaterThan(100);
   });
 
-  test('brain is divided into 8 functional cortical areas across Left and Right hemispheres, corpus callosum, cerebellum L/R, pons, and medulla', () => {
+  test('brain includes BOTH the 4 anatomical cerebral lobes (L/R) in category brain AND the 10 functional cortical areas (L/R) in category brainFunctional', () => {
     const regions = buildBrainRegions(headGeos, headCmMatrix, cmToViewer);
     for (const key of [
+      // 4 Anatomical Lobes × Left/Right
+      'brain_frontal_L', 'brain_frontal_R',
+      'brain_parietal_L', 'brain_parietal_R',
+      'brain_temporal_L', 'brain_temporal_R',
+      'brain_occipital_L', 'brain_occipital_R',
+      // 10 Functional Cortical Areas × Left/Right
       'func_motor_L', 'func_motor_R',
-      'func_sensory_L', 'func_sensory_R',
-      'func_broca_L', 'func_broca_R',
-      'func_wernicke_auditory_L', 'func_wernicke_auditory_R',
+      'func_premotor_L', 'func_premotor_R',
       'func_prefrontal_L', 'func_prefrontal_R',
+      'func_broca_L', 'func_broca_R',
+      'func_sensory_L', 'func_sensory_R',
       'func_parietal_assoc_L', 'func_parietal_assoc_R',
+      'func_auditory_L', 'func_auditory_R',
+      'func_wernicke_L', 'func_wernicke_R',
       'func_visual_L', 'func_visual_R',
       'func_temporal_limbic_L', 'func_temporal_limbic_R',
+      // Corpus Callosum, Cerebellum L/R, Pons, Medulla
       'corpus_callosum_M',
       'brain_cerebellum_L', 'brain_cerebellum_R',
       'brain_pons', 'brain_medulla',
@@ -67,7 +76,9 @@ describe('3D Nervous System & Skeleton builder verification', () => {
       expect(regions[key], key).toBeDefined();
       expect(regions[key].attributes.position.count, key).toBeGreaterThan(500);
     }
-    expect(CATEGORIES.length).toBe(8);
+    expect(CATEGORIES.length).toBe(9);
+    expect(STRUCTURES.filter(s => s.category === 'brain').length).toBe(10);
+    expect(STRUCTURES.filter(s => s.category === 'brainFunctional').length).toBe(10);
   });
 
   test('torso skeleton separates thoracic spine, lumbar spine, and sacrum from ribcage, shoulder girdle, and pelvic hip bones', () => {

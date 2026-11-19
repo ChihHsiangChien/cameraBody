@@ -58,6 +58,9 @@ const EN = Object.freeze({
   '雙側半球': 'Both Hemispheres',
   '左大腦半球': 'Left Hemisphere',
   '右大腦半球': 'Right Hemisphere',
+  '腦葉＋功能疊加': 'Lobes + Functional',
+  '僅解剖腦葉': 'Anatomical Lobes Only',
+  '僅功能分區': 'Functional Areas Only',
   '顯示大腦功能分區 3D 標示': 'Show 3D functional brain labels',
   '大腦功能分區圖譜配色': 'Functional cortical map colors',
 

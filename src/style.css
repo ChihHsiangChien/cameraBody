@@ -500,14 +500,20 @@ ul { list-style: none; }
   flex: 1;
 }
 
-/* Brain Hemisphere Segmented Selector */
+/* Brain Hemisphere & Partition Segmented Selectors */
 .hemi-seg {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
+.hemi-seg.separator-top {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 8px;
+}
 
-.hemi-btn {
+.hemi-btn,
+.brain-mode-btn {
   font-size: var(--t-small);
   padding: 6px 4px;
   text-align: center;
@@ -515,7 +521,8 @@ ul { list-style: none; }
   background: var(--control);
   color: var(--text-soft);
 }
-.hemi-btn.active {
+.hemi-btn.active,
+.brain-mode-btn.active {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);

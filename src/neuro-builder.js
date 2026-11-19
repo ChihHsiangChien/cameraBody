@@ -198,18 +198,30 @@ export function splitGeometryByComponents(geometry, classifyComponent) {
 }
 
 /**
- * Split head.json's cerebrum & hindbrain into:
- * - 8 Functional Cortical Areas × Left/Right Hemispheres (_L and _R)
- * - Midline Corpus Callosum (corpus_callosum_M)
- * - Left & Right Cerebellar Hemispheres (brain_cerebellum_L, brain_cerebellum_R)
- * - Pons/Midbrain (brain_pons) & Medulla Oblongata (brain_medulla)
+ * Split head.json's cerebrum & hindbrain into BOTH:
+ * 1) Anatomical Cerebral Lobes × Left/Right Hemispheres (brain_frontal_L/R, brain_parietal_L/R, brain_temporal_L/R, brain_occipital_L/R)
+ * 2) 10 Functional Cortical Areas × Left/Right Hemispheres (func_motor_L/R, func_premotor_L/R, func_prefrontal_L/R, func_broca_L/R,
+ *    func_sensory_L/R, func_parietal_assoc_L/R, func_auditory_L/R, func_wernicke_L/R, func_visual_L/R, func_temporal_limbic_L/R)
+ * 3) Midline Corpus Callosum (corpus_callosum_M)
+ * 4) Left & Right Cerebellar Hemispheres (brain_cerebellum_L, brain_cerebellum_R), Pons/Midbrain (brain_pons) & Medulla (brain_medulla)
  */
 export function buildBrainRegions(headGeos, headCmMatrix, cmToViewer) {
   const fullHeadTransform = cmToViewer.clone().multiply(headCmMatrix);
 
-  // 1. Classify cerebrum (in canonical head cm space) into 8 functional areas × L/R hemispheres + corpus callosum
-  const functionalAreas = splitGeometryByComponents(headGeos.cerebrum, ({ cx, cy, cz }) => {
+  // 1. Classify cerebrum into the 4 anatomical cerebral lobes × L/R hemispheres + corpus callosum
+  const anatomicalLobes = splitGeometryByComponents(headGeos.cerebrum, ({ cx, cy, cz }) => {
     if (Math.abs(cx) <= 0.15) return 'corpus_callosum_M';
+    const side = cx > 0 ? 'L' : 'R';
+    let lobe = 'brain_frontal';
+    if (cz < -11.0) lobe = 'brain_occipital';
+    else if (cy < 5.6 && cz < -2.5) lobe = 'brain_temporal';
+    else if (cz < -5.8 && cy >= 5.6) lobe = 'brain_parietal';
+    return `${lobe}_${side}`;
+  });
+
+  // 2. Classify cerebrum into the 10 functional cortical areas × L/R hemispheres
+  const functionalAreas = splitGeometryByComponents(headGeos.cerebrum, ({ cx, cy, cz }) => {
+    if (Math.abs(cx) <= 0.15) return 'corpus_callosum_ignore';
     const side = cx > 0 ? 'L' : 'R';
     let area = 'func_temporal_limbic';
     if (cz <= -12.15) {
@@ -220,27 +232,45 @@ export function buildBrainRegions(headGeos, headCmMatrix, cmToViewer) {
       area = 'func_sensory';
     } else if (cy >= 6.8 && cz <= -8.5 && cz > -12.15) {
       area = 'func_parietal_assoc';
-    } else if (Math.abs(cx) > 5.0 && cy >= 3.5 && cy < 7.5 && cz <= -6.5 && cz > -10.0) {
-      area = 'func_wernicke_auditory';
+    } else if (Math.abs(cx) > 5.0 && cy >= 5.0 && cy < 7.5 && cz <= -6.5 && cz > -10.0) {
+      area = 'func_auditory';
+    } else if (Math.abs(cx) > 5.0 && cy >= 3.5 && cy < 5.0 && cz <= -6.5 && cz > -10.0) {
+      area = 'func_wernicke';
     } else if (Math.abs(cx) > 3.6 && cy >= 5.0 && cy < 9.2 && cz > -4.5) {
       area = 'func_broca';
+    } else if (cy > 9.5 && cz >= -6.0 && cz < -2.0) {
+      area = 'func_premotor';
     } else if (cz > -5.2 && cy >= 4.0) {
       area = 'func_prefrontal';
     }
     return `${area}_${side}`;
   });
+  delete functionalAreas.corpus_callosum_ignore;
 
-  // 2. Classify hindbrain into Left/Right Cerebellum, Pons/Midbrain, and Medulla Oblongata
+  // 3. Classify hindbrain into Left/Right Cerebellum, Pons/Midbrain, and Medulla Oblongata
   const hind = splitGeometryByComponents(headGeos.hindbrain, ({ cx, minY, minZ }) => {
     if (minZ < -10.0) return cx >= 0 ? 'brain_cerebellum_L' : 'brain_cerebellum_R';
     if (minY < -1.0) return 'brain_medulla';
     return 'brain_pons';
   });
 
-  const regions = { ...functionalAreas, ...hind };
-  for (const g of Object.values(regions)) {
+  const regions = { ...anatomicalLobes, ...functionalAreas, ...hind };
+  for (const [key, g] of Object.entries(regions)) {
     g.applyMatrix4(fullHeadTransform);
     g.computeVertexNormals();
+    // Nudge functional cortical areas outward by 0.15 mm along vertex normals so they overlay cleanly on anatomical lobes without z-fighting
+    if (key.startsWith('func_')) {
+      const pos = g.attributes.position;
+      const norm = g.attributes.normal;
+      for (let i = 0; i < pos.count; i++) {
+        pos.setXYZ(
+          i,
+          pos.getX(i) + norm.getX(i) * 0.00015,
+          pos.getY(i) + norm.getY(i) * 0.00015,
+          pos.getZ(i) + norm.getZ(i) * 0.00015
+        );
+      }
+    }
     g.computeBoundingBox();
     g.computeBoundingSphere();
   }

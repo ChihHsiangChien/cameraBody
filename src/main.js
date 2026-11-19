@@ -275,20 +275,24 @@ if (brainPinsCheckbox) {
   });
 }
 
-// Functional Cortical Map Colors Toggle
-const functionalColorsCheckbox = document.getElementById('functional-colors-toggle');
-if (functionalColorsCheckbox) {
-  functionalColorsCheckbox.addEventListener('change', () => {
-    const enabled = functionalColorsCheckbox.checked;
-    viewer.setFunctionalColors(enabled);
-    for (const item of STRUCTURES) {
-      if (item.category === 'brain') {
-        const dot = document.querySelector(`span[data-dot-id="${item.id}"]`);
-        if (dot) dot.style.backgroundColor = enabled ? item.color : (item.naturalColor || item.color);
-      }
+// Brain Partition Mode Selector ('both' | 'anatomical' | 'functional')
+document.querySelectorAll('.brain-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.brain-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const mode = btn.getAttribute('data-brain-mode');
+    viewer.setBrainPartitionMode(mode);
+
+    // Sync all structure checkboxes and pins toggle
+    document.querySelectorAll('input[data-structure-id]').forEach(cb => {
+      const id = cb.getAttribute('data-structure-id');
+      cb.checked = viewer.isStructureVisible(id);
+    });
+    if (brainPinsCheckbox) {
+      brainPinsCheckbox.checked = viewer.getShowBrainPins();
     }
   });
-}
+});
 
 // Silhouette Controls
 if (silhouetteCheckbox) {

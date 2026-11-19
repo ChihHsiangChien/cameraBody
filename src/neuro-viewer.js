@@ -13,7 +13,7 @@ import {
 } from './neuro-builder.js';
 
 // Opaque, realistic medical textbook material for brain regions and spinal cord
-function createTextbookTissueMaterial(colorHex, { isCord = false } = {}) {
+function createTextbookTissueMaterial(colorHex, { isCord = false, isOverlay = false } = {}) {
   return new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(colorHex),
     roughness: isCord ? 0.42 : 0.48,
@@ -24,6 +24,9 @@ function createTextbookTissueMaterial(colorHex, { isCord = false } = {}) {
     opacity: 1.0,
     depthWrite: true,
     depthTest: true,
+    polygonOffset: isOverlay,
+    polygonOffsetFactor: isOverlay ? -1.5 : 0,
+    polygonOffsetUnits: isOverlay ? -1.5 : 0,
     side: THREE.DoubleSide,
   });
 }
@@ -268,13 +271,17 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     return cat === 'skeleton' || cat === 'skull' || cat === 'spine';
   }
 
+  function isBrainCategory(cat) {
+    return cat === 'brain' || cat === 'brainFunctional';
+  }
+
   function syncMeshVisibility(id) {
     const enabled = structureStates.get(id) !== false;
     const meshes = meshesByStructureId.get(id) || [];
     for (const m of meshes) {
       const mName = m.userData?.meshName || '';
       let hemiAllowed = true;
-      if (m.userData?.category === 'brain' && brainHemisphere !== 'both') {
+      if (isBrainCategory(m.userData?.category) && brainHemisphere !== 'both') {
         if (mName.endsWith('_L') && brainHemisphere !== 'L') hemiAllowed = false;
         if (mName.endsWith('_R') && brainHemisphere !== 'R') hemiAllowed = false;
       }
@@ -388,9 +395,11 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
         if (item.category === 'silhouette') {
           return silhouetteMaterial;
         }
+        if (item.category === 'brainFunctional') {
+          return createTextbookTissueMaterial(item.color, { isCord: false, isOverlay: true });
+        }
         if (item.category === 'brain') {
-          const c = functionalColors ? item.color : (item.naturalColor || item.color);
-          return createTextbookTissueMaterial(c, { isCord: false });
+          return createTextbookTissueMaterial(item.color, { isCord: false, isOverlay: false });
         }
         if (item.category === 'spinalCord') {
           return createTextbookTissueMaterial(item.color, { isCord: true });
@@ -483,7 +492,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
   }
 
   const brainCenterVec = new THREE.Vector3();
-  const LEFT_COL_IDS = new Set(['funcPrefrontal', 'funcMotor', 'funcBroca', 'funcTemporalLimbic', 'medulla']);
+  const LEFT_COL_IDS = new Set(['funcMotor', 'funcPremotor', 'funcPrefrontal', 'funcBroca', 'funcTemporalLimbic']);
 
   function updateCamera() {
     const pitchClamped = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, targetPitch));
@@ -827,7 +836,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     setBrainHemisphere(mode) {
       brainHemisphere = ['both', 'L', 'R'].includes(mode) ? mode : 'both';
       for (const item of STRUCTURES) {
-        if (item.category === 'brain') {
+        if (isBrainCategory(item.category)) {
           syncMeshVisibility(item.id);
         }
       }
@@ -840,27 +849,31 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
       return brainHemisphere;
     },
 
-    // Toggle functional cortical map coloring vs natural uniform textbook coloring
-    setFunctionalColors(enabled) {
-      functionalColors = !!enabled;
-      for (const item of STRUCTURES) {
-        if (item.category === 'brain') {
-          const c = functionalColors ? item.color : (item.naturalColor || item.color);
-          const meshes = meshesByStructureId.get(item.id) || [];
-          for (const m of meshes) {
-            m.material.color.set(c);
-            m.material.needsUpdate = true;
+    // Quick brain partition mode: 'both' (Lobes + Functional) | 'anatomical' (Lobes only) | 'functional' (Functional areas only)
+    setBrainPartitionMode(mode) {
+      const baseLobes = ['frontalLobe', 'parietalLobe', 'temporalLobe', 'occipitalLobe'];
+      if (mode === 'anatomical') {
+        for (const item of STRUCTURES) {
+          if (item.category === 'brain') this.toggleStructure(item.id, true);
+          if (item.category === 'brainFunctional') this.toggleStructure(item.id, false);
+        }
+        this.setShowBrainPins(false);
+      } else if (mode === 'functional') {
+        for (const item of STRUCTURES) {
+          if (item.category === 'brain') {
+            this.toggleStructure(item.id, !baseLobes.includes(item.id));
+          }
+          if (item.category === 'brainFunctional') {
+            this.toggleStructure(item.id, true);
           }
         }
+        this.setShowBrainPins(true);
+      } else {
+        for (const item of STRUCTURES) {
+          if (isBrainCategory(item.category)) this.toggleStructure(item.id, true);
+        }
+        this.setShowBrainPins(true);
       }
-      for (const p of pinElements) {
-        const c = functionalColors ? p.item.color : (p.item.naturalColor || p.item.color);
-        p.dot.style.backgroundColor = c;
-      }
-    },
-
-    getFunctionalColors() {
-      return functionalColors;
     },
 
     // Toggle 3D Floating Functional Brain Area Pins
@@ -908,14 +921,14 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
         this.setGhostBones(true);
       } else if (name === 'nervesOnly') {
         for (const item of STRUCTURES) {
-          const isNerve = ['brain', 'cranialNerves', 'spinalCord', 'peripheralNerves'].includes(item.category);
+          const isNerve = ['brain', 'brainFunctional', 'cranialNerves', 'spinalCord', 'peripheralNerves'].includes(item.category);
           this.toggleStructure(item.id, isNerve);
         }
         this.toggleStructure('silhouetteMesh', true);
       } else if (name === 'nervesAndSpine') {
         // Shows Nervous System + isolated Vertebral Column (Cervical, Thoracic, Lumbar, Sacrum) without ribs/pelvis/limbs!
         for (const item of STRUCTURES) {
-          const keep = ['brain', 'cranialNerves', 'spinalCord', 'peripheralNerves', 'spine'].includes(item.category);
+          const keep = ['brain', 'brainFunctional', 'cranialNerves', 'spinalCord', 'peripheralNerves', 'spine'].includes(item.category);
           this.toggleStructure(item.id, keep);
         }
         this.toggleStructure('silhouetteMesh', true);
