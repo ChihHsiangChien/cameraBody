@@ -73,13 +73,13 @@ export const SYSTEM_PAGES = Object.freeze({
     meta: URINARY_META,
     categories: URINARY_CATEGORIES,
     structures: URINARY_STRUCTURES,
-    defaultView: { yaw: 0.22, pitch: 0.04, dist: 1.18, pivot: [0, -0.04, 0] },
+    defaultView: { yaw: 0.22, pitch: 0.04, dist: 1.18, pivot: [0, -0.22, 0] },
   },
   endocrine: {
     meta: ENDOCRINE_META,
     categories: ENDOCRINE_CATEGORIES,
     structures: ENDOCRINE_STRUCTURES,
-    defaultView: { yaw: 0.24, pitch: 0.05, dist: 1.28, pivot: [0, 0.12, 0] },
+    defaultView: { yaw: 0.24, pitch: 0.05, dist: 1.50, pivot: [0, -0.03, 0] },
   },
   digestive: {
     meta: DIGESTIVE_META,
@@ -270,7 +270,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
   let silhouetteOpacity = 0.22;
   let silhouetteMaterial = null;
   let brainHemisphere = 'both'; // 'both' | 'L' | 'R'
-  let showBrainPins = true;
+  let showBrainPins = false;
 
   // Orbit & Pan & Zoom interaction state
   let yaw = 0.28;
@@ -348,18 +348,21 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('class', 'pin-leader-line');
       line.setAttribute('stroke', item.color);
+      if (!showBrainPins) line.style.display = 'none';
       pinsSvg.appendChild(line);
 
       const anchorCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       anchorCircle.setAttribute('class', 'pin-anchor-dot');
       anchorCircle.setAttribute('r', '3.5');
       anchorCircle.setAttribute('fill', item.color);
+      if (!showBrainPins) anchorCircle.style.display = 'none';
       pinsSvg.appendChild(anchorCircle);
 
       const pinBtn = document.createElement('button');
       pinBtn.type = 'button';
       pinBtn.className = 'brain-pin';
       pinBtn.setAttribute('data-pin-id', item.id);
+      pinBtn.hidden = !showBrainPins;
 
       const dot = document.createElement('span');
       dot.className = 'pin-dot';
@@ -392,6 +395,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
       periMeta, periGeos,
       bodyMeta, bodyGeos,
       musclesMeta, musclesGeos,
+      extraMeta, extraGeos,
       cmToViewer, headCmMatrix,
     } = rawAssets;
 
@@ -438,15 +442,15 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
         ...spinalRootGeos,
       };
     } else if (pageId === 'circulatory') {
-      built = buildCirculatorySystemGeometries({ bodyMeta, bodyGeos, headGeos, headCmMatrix, cmToViewer });
+      built = buildCirculatorySystemGeometries({ bodyMeta, bodyGeos, headGeos, headCmMatrix, extraMeta, extraGeos, cmToViewer });
     } else if (pageId === 'respiratory') {
-      built = buildRespiratorySystemGeometries({ bodyMeta, bodyGeos, musclesMeta, musclesGeos, headGeos, headCmMatrix, cmToViewer });
+      built = buildRespiratorySystemGeometries({ bodyMeta, bodyGeos, musclesMeta, musclesGeos, headGeos, headCmMatrix, extraMeta, extraGeos, cmToViewer });
     } else if (pageId === 'urinary') {
-      built = buildUrinarySystemGeometries({ bodyMeta, bodyGeos, cmToViewer });
+      built = buildUrinarySystemGeometries({ bodyMeta, bodyGeos, extraMeta, extraGeos, cmToViewer });
     } else if (pageId === 'endocrine') {
-      built = buildEndocrineSystemGeometries({ headMeta, headGeos, headCmMatrix, bodyMeta, bodyGeos, cmToViewer });
+      built = buildEndocrineSystemGeometries({ headMeta, headGeos, headCmMatrix, bodyMeta, bodyGeos, extraMeta, extraGeos, cmToViewer });
     } else if (pageId === 'digestive') {
-      built = buildDigestiveSystemGeometries({ bodyMeta, bodyGeos, headGeos, headCmMatrix, cmToViewer });
+      built = buildDigestiveSystemGeometries({ bodyMeta, bodyGeos, headGeos, headCmMatrix, extraMeta, extraGeos, cmToViewer });
     }
 
     systemGeosCache.set(pageId, built || {});
@@ -512,6 +516,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
       periMeta, periGeos,
       bodyMeta, bodyGeos,
       musclesMeta, musclesGeos,
+      extraMeta, extraGeos,
       cmToViewer, fullHeadMatrix,
     } = rawAssets;
 
@@ -593,6 +598,12 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
             const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
             addStructureMesh(item, mName, musclesGeos[mName], mat);
           }
+        } else if (item.bundle === 'extra' || extraGeos?.[mName]) {
+          const entry = extraMeta?.meshes?.find(m => m.name === mName);
+          if (entry && extraGeos?.[mName]) {
+            const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, extraGeos[mName], mat);
+          }
         }
       }
     }
@@ -641,6 +652,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
         periMeta, periBuf,
         bodyMeta, bodyBuf,
         musclesMeta, musclesBuf,
+        extraMeta, extraBuf,
       ] = await Promise.all([
         fetch(assetUrl('anatomy/head.json')).then(r => r.json()),
         fetch(assetUrl('anatomy/head.bin')).then(r => r.arrayBuffer()),
@@ -652,6 +664,8 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
         fetch(assetUrl('anatomy/body.bin')).then(r => r.arrayBuffer()),
         fetch(assetUrl('anatomy/muscles.json')).then(r => r.json()),
         fetch(assetUrl('anatomy/muscles.bin')).then(r => r.arrayBuffer()),
+        fetch(assetUrl('anatomy/organs-extra.json')).then(r => r.json()),
+        fetch(assetUrl('anatomy/organs-extra.bin')).then(r => r.arrayBuffer()),
       ]);
 
       onProgress?.({ percent: 50, text: '解析 3D 幾何結構...' });
@@ -661,6 +675,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
       const periGeos = decodeGeometry(periMeta, periBuf);
       const bodyGeos = decodeGeometry(bodyMeta, bodyBuf);
       const musclesGeos = decodeGeometry(musclesMeta, musclesBuf);
+      const extraGeos = decodeGeometry(extraMeta, extraBuf);
 
       const cmToViewer = makeCmToViewerMatrix();
       const headSourceFrame = periMeta.meshes.find(m => m.name === 'pn_head_L').sourceFrame;
@@ -687,6 +702,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
         periMeta, periGeos,
         bodyMeta, bodyGeos,
         musclesMeta, musclesGeos,
+        extraMeta, extraGeos,
         cmToViewer,
         headCmMatrix,
         fullHeadMatrix,
@@ -1121,18 +1137,17 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
             this.toggleStructure(item.id, true);
           }
         }
-        this.setShowBrainPins(true);
       } else {
         for (const item of activeStructures) {
           if (isBrainCategory(item.category)) this.toggleStructure(item.id, true);
         }
-        this.setShowBrainPins(true);
       }
     },
 
     // Toggle 3D Floating Callout Pins
     setShowBrainPins(visible) {
       showBrainPins = !!visible;
+      updatePins();
     },
 
     getShowBrainPins() {

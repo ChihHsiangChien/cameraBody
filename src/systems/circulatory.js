@@ -3,6 +3,8 @@ import {
   makeCmMatrix,
   makeCmToViewerMatrix,
   mergeBufferGeometries,
+  meshInCm,
+  splitGeometryByTriangles,
 } from '../neuro-builder.js';
 
 export const CIRCULATORY_META = Object.freeze({
@@ -482,8 +484,17 @@ function snapToHeartSurface(heartPos, [qx, qy, qz], outwardCm = 0.14) {
 export function buildCirculatorySystemGeometries({
   bodyMeta,
   bodyGeos,
+  extraMeta = null,
+  extraGeos = null,
   cmToViewer = makeCmToViewerMatrix(),
 }) {
+  const extraAortaCm = meshInCm(extraMeta, extraGeos, 'extra_aorta');
+  const splitExtraAorta = extraAortaCm
+    ? splitGeometryByTriangles(extraAortaCm, ({ cy }) => (cy >= 126.5 ? 'arch' : 'desc'))
+    : null;
+  const extraVenaCavaCm = meshInCm(extraMeta, extraGeos, 'extra_vena_cava');
+  const extraPulmonaryCm = meshInCm(extraMeta, extraGeos, 'extra_pulmonary_vessels');
+  const extraCoronaryCm = meshInCm(extraMeta, extraGeos, 'extra_coronary_vessels');
   const heartEntry = bodyMeta.meshes.find(m => m.name === 'organs_heart');
   const heartCm = bodyGeos.organs_heart.clone().applyMatrix4(makeCmMatrix(heartEntry.sourceFrame));
   const heartPos = heartCm.attributes.position;
@@ -542,18 +553,21 @@ export function buildCirculatorySystemGeometries({
 
   // --- A3. Ascending Aorta & Aortic Arch (升主動脈與主動脈弓 + 三大分支起始段) ---
   const aorticTubes = [];
-  if (aorticRootTris.length > 0) {
-    aorticTubes.push(buildSubGeometryFromTriangles(heartPos, aorticRootTris));
+  if (splitExtraAorta?.arch) {
+    aorticTubes.push(splitExtraAorta.arch);
+  } else {
+    if (aorticRootTris.length > 0) {
+      aorticTubes.push(buildSubGeometryFromTriangles(heartPos, aorticRootTris));
+    }
+    aorticTubes.push(buildTubeCm([
+      [0.5, 125.6, 13.0],
+      [0.1, 128.2, 13.4],
+      [0.3, 130.4, 12.9],
+      [1.1, 131.2, 11.7],
+      [2.0, 130.4, 10.1],
+      [2.2, 128.0, 9.1],
+    ], 1.12, 30, 12));
   }
-  // Main Ascending Aorta -> Aortic Arch -> Proximal Descending Thoracic Aorta junction
-  aorticTubes.push(buildTubeCm([
-    [0.5, 125.6, 13.0],
-    [0.1, 128.2, 13.4],
-    [0.3, 130.4, 12.9],
-    [1.1, 131.2, 11.7],
-    [2.0, 130.4, 10.1],
-    [2.2, 128.0, 9.1],
-  ], 1.12, 30, 12));
   // Brachiocephalic Trunk (頭臂幹 / 無名動脈)
   aorticTubes.push(buildTubeCm([
     [0.1, 130.6, 12.8],
@@ -574,139 +588,47 @@ export function buildCirculatorySystemGeometries({
   ], 0.46, 14, 8));
   const aortic_arch = finalizeCmGeos(aorticTubes);
 
-  // --- A4. Pulmonary Trunk, Left/Right Pulmonary Arteries & 4 Pulmonary Veins (肺動脈幹與左右肺動靜脈) ---
-  const pulmonaryTubes = [];
-  if (pulmonaryRootTris.length > 0) {
-    pulmonaryTubes.push(buildSubGeometryFromTriangles(heartPos, pulmonaryRootTris));
+  // --- A4. Pulmonary Trunk, Left/Right Pulmonary Arteries & Veins (肺動脈幹與左右肺動靜脈) ---
+  let pulmonary_vessels;
+  if (extraPulmonaryCm) {
+    pulmonary_vessels = finalizeCmGeos([extraPulmonaryCm]);
+  } else {
+    const pulmonaryTubes = [];
+    if (pulmonaryRootTris.length > 0) {
+      pulmonaryTubes.push(buildSubGeometryFromTriangles(heartPos, pulmonaryRootTris));
+    }
+    pulmonaryTubes.push(buildTubeCm([[1.8, 125.2, 14.8], [2.2, 127.4, 13.8], [2.0, 129.0, 12.1]], 0.92, 18, 10));
+    pulmonaryTubes.push(buildTubeCm([[2.0, 129.0, 12.1], [4.2, 128.9, 11.0], [6.6, 128.5, 9.8]], 0.68, 18, 10));
+    pulmonaryTubes.push(buildTubeCm([[5.8, 128.6, 10.1], [7.6, 130.6, 9.2], [8.8, 132.2, 8.6]], 0.38, 14, 8));
+    pulmonaryTubes.push(buildTubeCm([[6.4, 128.5, 9.8], [8.0, 126.0, 9.0], [9.2, 123.2, 8.4]], 0.40, 14, 8));
+    pulmonaryTubes.push(buildTubeCm([[2.0, 129.0, 12.1], [-0.4, 128.6, 11.3], [-3.6, 128.2, 10.5], [-6.6, 127.8, 9.6]], 0.70, 20, 10));
+    pulmonaryTubes.push(buildTubeCm([[-5.8, 128.0, 9.8], [-7.8, 130.2, 9.1], [-9.0, 132.0, 8.5]], 0.38, 14, 8));
+    pulmonaryTubes.push(buildTubeCm([[-6.4, 127.8, 9.6], [-8.2, 125.2, 8.9], [-9.4, 122.4, 8.3]], 0.40, 14, 8));
+    pulmonaryTubes.push(buildTubeCm([[8.4, 127.4, 10.4], [5.2, 126.2, 10.6], [2.2, 125.3, 10.6]], 0.44, 16, 8));
+    pulmonaryTubes.push(buildTubeCm([[8.0, 122.4, 10.0], [4.8, 123.5, 10.3], [2.0, 124.2, 10.5]], 0.44, 16, 8));
+    pulmonaryTubes.push(buildTubeCm([[-8.2, 126.8, 10.5], [-4.4, 125.6, 10.7], [-0.2, 125.0, 10.6]], 0.44, 16, 8));
+    pulmonaryTubes.push(buildTubeCm([[-7.8, 122.0, 10.0], [-4.2, 123.2, 10.3], [-0.2, 124.0, 10.5]], 0.44, 16, 8));
+    pulmonary_vessels = finalizeCmGeos(pulmonaryTubes);
   }
-  // Pulmonary Trunk from RV conus arteriosus (infundibulum) to bifurcation under aortic arch
-  pulmonaryTubes.push(buildTubeCm([
-    [1.8, 125.2, 14.8],
-    [2.2, 127.4, 13.8],
-    [2.0, 129.0, 12.1],
-  ], 0.92, 18, 10));
-  // Left Pulmonary Artery & lobar branches entering left lung hilum
-  pulmonaryTubes.push(buildTubeCm([
-    [2.0, 129.0, 12.1],
-    [4.2, 128.9, 11.0],
-    [6.6, 128.5, 9.8],
-  ], 0.68, 18, 10));
-  pulmonaryTubes.push(buildTubeCm([
-    [5.8, 128.6, 10.1],
-    [7.6, 130.6, 9.2],
-    [8.8, 132.2, 8.6],
-  ], 0.38, 14, 8));
-  pulmonaryTubes.push(buildTubeCm([
-    [6.4, 128.5, 9.8],
-    [8.0, 126.0, 9.0],
-    [9.2, 123.2, 8.4],
-  ], 0.40, 14, 8));
-  // Right Pulmonary Artery coursing under aortic arch to right lung hilum
-  pulmonaryTubes.push(buildTubeCm([
-    [2.0, 129.0, 12.1],
-    [-0.4, 128.6, 11.3],
-    [-3.6, 128.2, 10.5],
-    [-6.6, 127.8, 9.6],
-  ], 0.70, 20, 10));
-  pulmonaryTubes.push(buildTubeCm([
-    [-5.8, 128.0, 9.8],
-    [-7.8, 130.2, 9.1],
-    [-9.0, 132.0, 8.5],
-  ], 0.38, 14, 8));
-  pulmonaryTubes.push(buildTubeCm([
-    [-6.4, 127.8, 9.6],
-    [-8.2, 125.2, 8.9],
-    [-9.4, 122.4, 8.3],
-  ], 0.40, 14, 8));
-  // Four Pulmonary Veins (左右上下共四條肺靜脈匯入左心房後壁)
-  // Left superior pulmonary vein
-  pulmonaryTubes.push(buildTubeCm([
-    [8.4, 127.4, 10.4],
-    [5.2, 126.2, 10.6],
-    [2.2, 125.3, 10.6],
-  ], 0.44, 16, 8));
-  // Left inferior pulmonary vein
-  pulmonaryTubes.push(buildTubeCm([
-    [8.0, 122.4, 10.0],
-    [4.8, 123.5, 10.3],
-    [2.0, 124.2, 10.5],
-  ], 0.44, 16, 8));
-  // Right superior pulmonary vein
-  pulmonaryTubes.push(buildTubeCm([
-    [-8.2, 126.8, 10.5],
-    [-4.4, 125.6, 10.7],
-    [-0.2, 125.0, 10.6],
-  ], 0.44, 16, 8));
-  // Right inferior pulmonary vein
-  pulmonaryTubes.push(buildTubeCm([
-    [-7.8, 122.0, 10.0],
-    [-4.2, 123.2, 10.3],
-    [-0.2, 124.0, 10.5],
-  ], 0.44, 16, 8));
-  const pulmonary_vessels = finalizeCmGeos(pulmonaryTubes);
 
-  // --- A5. Coronary Arteries & Cardiac Veins (冠狀動脈 LAD / LCX / RCA 與心靜脈，精準貼附於心外膜表面) ---
-  const snap = (pt, out = 0.15) => snapToHeartSurface(heartPos, pt, out);
-  const coronaryTubes = [];
-  // Left Main -> Left Anterior Descending (LAD / 前室間支) down to cardiac apex
-  coronaryTubes.push(buildTubeCm([
-    snap([1.5, 126.0, 15.2], 0.16),
-    snap([2.1, 124.8, 16.5], 0.16),
-    snap([2.5, 123.6, 17.3], 0.16),
-    snap([3.0, 122.2, 17.3], 0.16),
-    snap([3.8, 120.8, 17.0], 0.16),
-    snap([4.6, 119.3, 15.8], 0.16),
-  ], 0.21, 26, 8));
-  // First & Second Diagonal Branches of LAD (D1, D2 對角支)
-  coronaryTubes.push(buildTubeCm([
-    snap([2.5, 123.6, 17.3], 0.16),
-    snap([4.1, 122.6, 16.6], 0.15),
-    snap([5.5, 121.3, 15.5], 0.15),
-  ], 0.14, 14, 6));
-  coronaryTubes.push(buildTubeCm([
-    snap([3.2, 121.8, 17.2], 0.16),
-    snap([4.8, 120.8, 16.2], 0.15),
-    snap([6.1, 119.8, 14.8], 0.15),
-  ], 0.13, 14, 6));
-  // Left Circumflex Artery (LCX / 左迴旋支) & Obtuse Marginal Branch (OM 鈍緣支)
-  coronaryTubes.push(buildTubeCm([
-    snap([1.5, 126.0, 15.2], 0.16),
-    snap([3.4, 125.4, 14.8], 0.16),
-    snap([5.2, 124.5, 13.6], 0.16),
-    snap([6.2, 123.6, 11.8], 0.16),
-    snap([5.0, 122.5, 10.1], 0.16),
-  ], 0.19, 22, 8));
-  coronaryTubes.push(buildTubeCm([
-    snap([5.2, 124.5, 13.6], 0.16),
-    snap([6.4, 122.5, 13.2], 0.15),
-    snap([6.6, 120.4, 12.6], 0.15),
-  ], 0.14, 14, 6));
-  // Right Coronary Artery (RCA / 右冠狀動脈) -> Acute Marginal -> Posterior Descending Artery (PDA / 後室間支)
-  coronaryTubes.push(buildTubeCm([
-    snap([-0.3, 125.4, 15.2], 0.16),
-    snap([-1.8, 124.2, 15.1], 0.16),
-    snap([-2.4, 122.5, 14.5], 0.16),
-    snap([-2.4, 121.0, 13.2], 0.16),
-    snap([-1.2, 120.2, 11.4], 0.16),
-    snap([0.8, 119.8, 10.6], 0.16),
-    snap([2.8, 119.4, 11.2], 0.16),
-  ], 0.20, 28, 8));
-  // Right Acute Marginal Branch (右銳緣支)
-  coronaryTubes.push(buildTubeCm([
-    snap([-2.4, 121.8, 14.0], 0.16),
-    snap([-0.6, 120.8, 15.4], 0.15),
-    snap([1.4, 119.9, 15.8], 0.15),
-  ], 0.14, 14, 6));
-  // Great Cardiac Vein & Coronary Sinus (心大靜脈與冠狀竇)
-  coronaryTubes.push(buildTubeCm([
-    snap([3.4, 121.2, 17.1], 0.14),
-    snap([2.1, 123.8, 17.1], 0.14),
-    snap([3.8, 125.0, 14.5], 0.14),
-    snap([5.6, 123.5, 11.2], 0.14),
-    snap([3.2, 122.2, 9.6], 0.15),
-    snap([0.4, 121.8, 9.8], 0.16),
-  ], 0.17, 24, 8));
-  const coronary_vessels = finalizeCmGeos(coronaryTubes);
+  // --- A5. Coronary Arteries & Cardiac Veins (冠狀動脈與冠狀竇) ---
+  let coronary_vessels;
+  if (extraCoronaryCm) {
+    coronary_vessels = finalizeCmGeos([extraCoronaryCm]);
+  } else {
+    const snap = (pt, out = 0.15) => snapToHeartSurface(heartPos, pt, out);
+    const coronaryTubes = [
+      buildTubeCm([snap([1.5, 126.0, 15.2], 0.16), snap([2.1, 124.8, 16.5], 0.16), snap([2.5, 123.6, 17.3], 0.16), snap([3.0, 122.2, 17.3], 0.16), snap([3.8, 120.8, 17.0], 0.16), snap([4.6, 119.3, 15.8], 0.16)], 0.21, 26, 8),
+      buildTubeCm([snap([2.5, 123.6, 17.3], 0.16), snap([4.1, 122.6, 16.6], 0.15), snap([5.5, 121.3, 15.5], 0.15)], 0.14, 14, 6),
+      buildTubeCm([snap([3.2, 121.8, 17.2], 0.16), snap([4.8, 120.8, 16.2], 0.15), snap([6.1, 119.8, 14.8], 0.15)], 0.13, 14, 6),
+      buildTubeCm([snap([1.5, 126.0, 15.2], 0.16), snap([3.4, 125.4, 14.8], 0.16), snap([5.2, 124.5, 13.6], 0.16), snap([6.2, 123.6, 11.8], 0.16), snap([5.0, 122.5, 10.1], 0.16)], 0.19, 22, 8),
+      buildTubeCm([snap([5.2, 124.5, 13.6], 0.16), snap([6.4, 122.5, 13.2], 0.15), snap([6.6, 120.4, 12.6], 0.15)], 0.14, 14, 6),
+      buildTubeCm([snap([-0.3, 125.4, 15.2], 0.16), snap([-1.8, 124.2, 15.1], 0.16), snap([-2.4, 122.5, 14.5], 0.16), snap([-2.4, 121.0, 13.2], 0.16), snap([-1.2, 120.2, 11.4], 0.16), snap([0.8, 119.8, 10.6], 0.16), snap([2.8, 119.4, 11.2], 0.16)], 0.20, 28, 8),
+      buildTubeCm([snap([-2.4, 121.8, 14.0], 0.16), snap([-0.6, 120.8, 15.4], 0.15), snap([1.4, 119.9, 15.8], 0.15)], 0.14, 14, 6),
+      buildTubeCm([snap([3.4, 121.2, 17.1], 0.14), snap([2.1, 123.8, 17.1], 0.14), snap([3.8, 125.0, 14.5], 0.14), snap([5.6, 123.5, 11.2], 0.14), snap([3.2, 122.2, 9.6], 0.15), snap([0.4, 121.8, 9.8], 0.16)], 0.17, 24, 8),
+    ];
+    coronary_vessels = finalizeCmGeos(coronaryTubes);
+  }
 
   // --- B1. Head & Neck Arteries: Common/Internal/External Carotid, Vertebral, Basilar & Circle of Willis ---
   const headNeckArteryTubes = [];
@@ -809,16 +731,19 @@ export function buildCirculatorySystemGeometries({
 
   // --- B2. Thoracic & Abdominal Aorta & Visceral Branches (胸主動脈・腹主動脈與內臟動脈分支) ---
   const aortaTubes = [];
-  // Main Descending Thoracic Aorta -> Diaphragmatic Aortic Hiatus (T12) -> Abdominal Aorta -> L4 Bifurcation
-  aortaTubes.push(buildTubeCm([
-    [2.2, 128.2, 9.1],
-    [1.7, 124.0, 8.5],
-    [1.1, 119.0, 8.5],
-    [0.6, 114.0, 8.9],
-    [0.4, 109.0, 9.5],
-    [0.3, 103.5, 9.9],
-    [0.2, 97.5, 10.2],
-  ], 0.88, 36, 12));
+  if (splitExtraAorta?.desc) {
+    aortaTubes.push(splitExtraAorta.desc);
+  } else {
+    aortaTubes.push(buildTubeCm([
+      [2.2, 128.2, 9.1],
+      [1.7, 124.0, 8.5],
+      [1.1, 119.0, 8.5],
+      [0.6, 114.0, 8.9],
+      [0.4, 109.0, 9.5],
+      [0.3, 103.5, 9.9],
+      [0.2, 97.5, 10.2],
+    ], 0.88, 36, 12));
+  }
 
   // Segmental Posterior Intercostal Arteries (6 representative pairs along thoracic cage)
   for (const yLevel of [126.0, 123.5, 121.0, 118.5, 116.0, 113.5]) {
@@ -1042,12 +967,25 @@ export function buildCirculatorySystemGeometries({
 
   // --- C1. Superior & Inferior Vena Cava, Brachiocephalic, Hepatic, Renal & Azygos Veins (上下腔靜脈與奇靜脈系統) ---
   const venaCavaTubes = [];
-  // Superior Vena Cava (上腔靜脈 SVC) entering superior right atrium
-  venaCavaTubes.push(buildTubeCm([
-    [-2.2, 133.2, 12.2],
-    [-2.1, 129.5, 12.2],
-    [-1.9, 125.8, 12.2],
-  ], 0.86, 18, 10));
+  if (extraVenaCavaCm) {
+    venaCavaTubes.push(extraVenaCavaCm);
+  } else {
+    // Superior Vena Cava (上腔靜脈 SVC) entering superior right atrium
+    venaCavaTubes.push(buildTubeCm([
+      [-2.2, 133.2, 12.2],
+      [-2.1, 129.5, 12.2],
+      [-1.9, 125.8, 12.2],
+    ], 0.86, 18, 10));
+    // Inferior Vena Cava (下腔靜脈 IVC)
+    venaCavaTubes.push(buildTubeCm([
+      [-0.9, 96.2, 9.7],
+      [-1.3, 102.0, 9.7],
+      [-1.5, 108.0, 9.8],
+      [-1.6, 114.5, 10.4],
+      [-1.6, 118.8, 11.2],
+      [-1.6, 122.2, 11.6],
+    ], 0.92, 28, 12));
+  }
   // Right Brachiocephalic Vein (右頭臂靜脈)
   venaCavaTubes.push(buildTubeCm([
     [-2.9, 135.8, 11.8],
@@ -1061,16 +999,6 @@ export function buildCirculatorySystemGeometries({
     [-1.2, 133.8, 12.4],
     [-2.2, 133.2, 12.2],
   ], 0.56, 18, 8));
-
-  // Inferior Vena Cava (下腔靜脈 IVC): L5 common iliac confluence -> retrohepatic IVC -> diaphragm caval opening -> inferior right atrium
-  venaCavaTubes.push(buildTubeCm([
-    [-0.9, 96.2, 9.7],
-    [-1.3, 102.0, 9.7],
-    [-1.5, 108.0, 9.8],
-    [-1.6, 114.5, 10.4],
-    [-1.6, 118.8, 11.2],
-    [-1.6, 122.2, 11.6],
-  ], 0.92, 28, 12));
 
   // Hepatic Veins (肝右・肝中・肝左靜脈匯入下腔靜脈上段)
   venaCavaTubes.push(buildTubeCm([

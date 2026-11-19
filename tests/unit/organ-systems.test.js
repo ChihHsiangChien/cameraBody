@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 import { decodeGeometry } from '../../src/geometry.js';
 import {
@@ -78,6 +79,9 @@ describe('Dedicated 3D Organ Systems & Skeleton modules verification', () => {
   const bodyGeos = decodeGeometry(bodyMeta, readBin('public/anatomy/body.bin'));
   const musclesMeta = readJson('public/anatomy/muscles.json');
   const musclesGeos = decodeGeometry(musclesMeta, readBin('public/anatomy/muscles.bin'));
+  const extraMeta = readJson('public/anatomy/organs-extra.json');
+  const extraBinBuf = readBin('public/anatomy/organs-extra.bin');
+  const extraGeos = decodeGeometry(extraMeta, extraBinBuf);
 
   const headSf = periMeta.meshes.find(m => m.name === 'pn_head_L').sourceFrame;
   const headCmMatrix = makeCmMatrix(headSf);
@@ -143,11 +147,28 @@ describe('Dedicated 3D Organ Systems & Skeleton modules verification', () => {
     }
   }
 
+  test('0. BodyParts3D organs-extra companion bundle satisfies binary, hash, size, and mesh contracts', () => {
+    const rawBytes = readFileSync(new URL('../../public/anatomy/organs-extra.bin', import.meta.url));
+    expect(rawBytes.byteLength).toBe(extraMeta.binaryBytes);
+    expect(rawBytes.byteLength).toBeLessThan(1_000_000);
+    expect(createHash('sha256').update(rawBytes).digest('hex')).toBe(extraMeta.binarySha256);
+    expect(extraMeta.meshes).toHaveLength(22);
+
+    for (const entry of extraMeta.meshes) {
+      expect(entry.ni % 3, entry.name).toBe(0);
+      expect(entry.offV + entry.nv * 6, entry.name).toBeLessThanOrEqual(rawBytes.byteLength);
+      expect(entry.offI + entry.ni * 2, entry.name).toBeLessThanOrEqual(rawBytes.byteLength);
+      assertValidBufferGeometry(extraGeos[entry.name], `organs-extra.${entry.name}`);
+    }
+  });
+
   test('1. Circulatory System + Skeleton exports metadata, categories, structures, and valid 3D geometries', () => {
     expect(typeof buildCirculatorySystemGeometries).toBe('function');
     const customGeos = buildCirculatorySystemGeometries({
       bodyMeta,
       bodyGeos,
+      extraMeta,
+      extraGeos,
       cmToViewer,
     });
 
@@ -185,6 +206,8 @@ describe('Dedicated 3D Organ Systems & Skeleton modules verification', () => {
       bodyGeos,
       musclesMeta,
       musclesGeos,
+      extraMeta,
+      extraGeos,
       cmToViewer,
     });
 
@@ -231,11 +254,15 @@ describe('Dedicated 3D Organ Systems & Skeleton modules verification', () => {
     );
   });
 
-  test('3. Urinary System + Skeleton exports kidneys, urinary tract, renal vessels, and skeleton with valid 3D geometries', () => {
+  test('3. Urinary System + Skeleton exports kidneys, urinary tract, renal vessels, and skeleton WITHOUT adrenal glands', () => {
     expect(typeof buildUrinarySystemGeometries).toBe('function');
+    expect(URINARY_STRUCTURES.some(s => /adrenal/i.test(s.id))).toBe(false);
+
     const customGeos = buildUrinarySystemGeometries({
       bodyMeta,
       bodyGeos,
+      extraMeta,
+      extraGeos,
       cmToViewer,
     });
 
@@ -258,7 +285,6 @@ describe('Dedicated 3D Organ Systems & Skeleton modules verification', () => {
         'leftKidney',
         'rightKidney',
         'renalPelvisCalyces',
-        'adrenalCaps',
         'ureters',
         'urinaryBladder',
         'urethraSphincter',
@@ -276,6 +302,8 @@ describe('Dedicated 3D Organ Systems & Skeleton modules verification', () => {
       headCmMatrix,
       bodyMeta,
       bodyGeos,
+      extraMeta,
+      extraGeos,
       cmToViewer,
     });
 
@@ -316,6 +344,8 @@ describe('Dedicated 3D Organ Systems & Skeleton modules verification', () => {
     const customGeos = buildDigestiveSystemGeometries({
       bodyMeta,
       bodyGeos,
+      extraMeta,
+      extraGeos,
       cmToViewer,
     });
 

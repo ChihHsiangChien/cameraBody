@@ -6,6 +6,7 @@ import {
   makeCmMatrix,
   makeCmToViewerMatrix,
   mergeBufferGeometries,
+  meshInCm,
   splitGeometryByComponents,
 } from '../neuro-builder.js';
 
@@ -92,7 +93,7 @@ export const RESPIRATORY_STRUCTURES = Object.freeze([
     nameEn: 'Larynx, Thyroid & Cricoid Cartilages, Epiglottis & Vocal Folds',
     pinZh: '喉部與聲門',
     pinEn: 'Larynx & Vocal Folds',
-    anchorL: [0.0, 0.265, 0.048],
+    anchorL: [0.0000, 0.2700, 0.0330],
     bundle: 'custom',
     meshes: ['resp_larynx'],
     color: '#38bdf8',
@@ -106,7 +107,7 @@ export const RESPIRATORY_STRUCTURES = Object.freeze([
     nameEn: 'Trachea, Carina & Bilateral Bronchial Tree',
     pinZh: '氣管與支氣管樹',
     pinEn: 'Trachea & Bronchial Tree',
-    anchorL: [0.0, 0.165, 0.032],
+    anchorL: [0.0010, 0.1210, 0.0230],
     bundle: 'custom',
     meshes: ['resp_trachea_bronchi'],
     color: '#7dd3fc',
@@ -194,7 +195,7 @@ export const RESPIRATORY_STRUCTURES = Object.freeze([
     nameEn: 'Thoracic Diaphragm (Primary Inspiratory Muscle)',
     pinZh: '橫膈膜 (主要吸氣肌)',
     pinEn: 'Diaphragm (Primary Inspiratory)',
-    anchorL: [-0.045, -0.012, 0.045],
+    anchorL: [-0.0450, -0.0490, 0.0350],
     bundle: 'custom',
     meshes: ['resp_diaphragm'],
     color: '#c83e31',
@@ -211,11 +212,11 @@ export const RESPIRATORY_STRUCTURES = Object.freeze([
     nameEn: 'External & Internal Intercostal & Thoracic Wall Muscles',
     pinZh: '內外肋間肌與胸肌',
     pinEn: 'Intercostal & Pectoral Muscles',
-    anchorL: [0.105, 0.105, 0.062],
+    anchorL: [0.1050, 0.0530, 0.0250],
     bundle: 'custom',
     meshes: ['resp_intercostals'],
     color: '#b83b2a',
-    opacity: 0.28,
+    opacity: 0.48,
     transparent: true,
     depthWrite: false,
     descZh: '分布於十二對肋骨間隙及前外側胸廓（含外肋間肌、內肋間肌、前鋸肌與胸大／胸小肌）；外肋間肌收縮時向上向外提起肋骨（「桶柄運動」與「泵柄運動」）以擴大胸廓前後與左右橫徑協助吸氣，內肋間肌則於用力呼氣時拉降肋骨。預設採半透明顯示以便透視內部肺葉與支氣管樹。',
@@ -1061,6 +1062,8 @@ export function buildRespiratorySystemGeometries({
   bodyGeos,
   musclesMeta = null,
   musclesGeos = null,
+  extraMeta = null,
+  extraGeos = null,
   cmToViewer = makeCmToViewerMatrix(),
 }) {
   const finalizeCm = geoCm => {
@@ -1072,6 +1075,10 @@ export function buildRespiratorySystemGeometries({
   };
 
   const lungLobes = buildFiveLungLobes(bodyMeta, bodyGeos, cmToViewer);
+  const extraLarynxCm = meshInCm(extraMeta, extraGeos, 'extra_thyroid_cartilage');
+  const extraTracheaCm = meshInCm(extraMeta, extraGeos, 'extra_trachea_bronchi');
+  const extraDiaphragmCm = meshInCm(extraMeta, extraGeos, 'extra_diaphragm');
+  const extraIntercostalsCm = meshInCm(extraMeta, extraGeos, 'extra_intercostals');
 
   const muscleNeckL = buildMuscleViewerGeo('muscle_neck_L', musclesMeta, musclesGeos, cmToViewer, () =>
     mergeBufferGeometries([
@@ -1100,11 +1107,11 @@ export function buildRespiratorySystemGeometries({
 
   return {
     resp_nasal_pharynx: finalizeCm(buildNasalPharynxCm()),
-    resp_larynx: finalizeCm(buildLarynxCm()),
-    resp_trachea_bronchi: finalizeCm(buildTracheaAndBronchialTreeCm()),
+    resp_larynx: finalizeCm(extraLarynxCm || buildLarynxCm()),
+    resp_trachea_bronchi: finalizeCm(extraTracheaCm || buildTracheaAndBronchialTreeCm()),
     ...lungLobes,
-    resp_diaphragm: finalizeCm(buildDiaphragmCm()),
-    resp_intercostals: finalizeCm(buildIntercostalMusclesCm(musclesMeta, musclesGeos)),
+    resp_diaphragm: finalizeCm(extraDiaphragmCm || buildDiaphragmCm()),
+    resp_intercostals: finalizeCm(extraIntercostalsCm || buildIntercostalMusclesCm(musclesMeta, musclesGeos)),
     muscle_neck_L: muscleNeckL,
     muscle_neck_R: muscleNeckR,
     muscle_abdomen_L: muscleAbdomenL,

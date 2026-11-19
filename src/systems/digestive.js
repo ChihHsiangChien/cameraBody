@@ -3,6 +3,8 @@ import {
   makeCmMatrix,
   makeCmToViewerMatrix,
   mergeBufferGeometries,
+  meshInCm,
+  splitGeometryByTriangles,
 } from '../neuro-builder.js';
 
 export const DIGESTIVE_META = Object.freeze({
@@ -95,7 +97,7 @@ export const DIGESTIVE_STRUCTURES = Object.freeze([
     nameEn: 'Esophagus (Cervical, Thoracic, Diaphragmatic Hiatus & Abdominal Segments)',
     pinZh: '食道',
     pinEn: 'Esophagus',
-    anchorL: [0.004, 0.145, 0.015],
+    anchorL: [0.0030, 0.1410, 0.0060],
     bundle: 'custom',
     meshes: ['dig_esophagus'],
     color: '#e57c73',
@@ -153,7 +155,7 @@ export const DIGESTIVE_STRUCTURES = Object.freeze([
     nameEn: 'Gallbladder & Biliary Tree (Hepatic, Cystic & Common Bile Ducts)',
     pinZh: '膽囊與總膽管',
     pinEn: 'Gallbladder & Bile Ducts',
-    anchorL: [-0.045, -0.068, 0.078],
+    anchorL: [-0.0550, -0.0680, 0.0710],
     bundle: 'custom',
     meshes: ['dig_gallbladder_biliary'],
     color: '#16a34a',
@@ -167,7 +169,7 @@ export const DIGESTIVE_STRUCTURES = Object.freeze([
     nameEn: 'Pancreas (Head, Uncinate Process, Body, Tail & Main Pancreatic Duct)',
     pinZh: '胰臟 (外分泌消化酶)',
     pinEn: 'Pancreas',
-    anchorL: [0.022, -0.074, 0.048],
+    anchorL: [0.0020, -0.0920, 0.0490],
     bundle: 'custom',
     meshes: ['dig_pancreas'],
     color: '#f3c969',
@@ -524,53 +526,6 @@ function buildEllipsoidCm(center, radii, eulerRad = [0, 0, 0], widthSegs = 14, h
 }
 
 /**
- * Partition an indexed BufferGeometry's triangles into named buckets using a triangle centroid classifier.
- */
-function splitGeometryByTriangles(geometry, classifyTriangle) {
-  const pos = geometry.attributes.position;
-  const idx = geometry.index.array;
-  const nv = pos.count;
-  const trisByBucket = new Map();
-
-  for (let i = 0; i < idx.length; i += 3) {
-    const i0 = idx[i], i1 = idx[i + 1], i2 = idx[i + 2];
-    const cx = (pos.getX(i0) + pos.getX(i1) + pos.getX(i2)) / 3;
-    const cy = (pos.getY(i0) + pos.getY(i1) + pos.getY(i2)) / 3;
-    const cz = (pos.getZ(i0) + pos.getZ(i1) + pos.getZ(i2)) / 3;
-    const bucket = classifyTriangle({ cx, cy, cz, i0, i1, i2 });
-    if (!bucket) continue;
-    if (!trisByBucket.has(bucket)) trisByBucket.set(bucket, []);
-    trisByBucket.get(bucket).push(i0, i1, i2);
-  }
-
-  const result = {};
-  for (const [bucket, triIndices] of trisByBucket.entries()) {
-    const remap = new Int32Array(nv).fill(-1);
-    const coords = [];
-    const localIdx = [];
-    for (let i = 0; i < triIndices.length; i++) {
-      const oldV = triIndices[i];
-      let newV = remap[oldV];
-      if (newV < 0) {
-        newV = coords.length / 3;
-        remap[oldV] = newV;
-        coords.push(pos.getX(oldV), pos.getY(oldV), pos.getZ(oldV));
-      }
-      localIdx.push(newV);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(coords), 3));
-    const IndexArray = coords.length / 3 > 65535 ? Uint32Array : Uint16Array;
-    g.setIndex(new THREE.BufferAttribute(new IndexArray(localIdx), 1));
-    g.computeVertexNormals();
-    g.computeBoundingBox();
-    g.computeBoundingSphere();
-    result[bucket] = g;
-  }
-  return result;
-}
-
-/**
  * 1. Build Oral Cavity (Tongue), Paired Major Salivary Glands (Parotid, Submandibular, Sublingual + Ducts),
  *    and Pharynx (Nasopharynx, Oropharynx, Laryngopharynx) in BodyParts3D cm.
  */
@@ -689,6 +644,41 @@ function buildLiverLobesCm(liverCmGeo) {
     dig_liver_right: mergeBufferGeometries([split.dig_liver_right, rightCap].filter(Boolean)),
     dig_liver_left: mergeBufferGeometries([split.dig_liver_left, leftCap].filter(Boolean)),
   };
+}
+
+/** Extrahepatic Biliary Ducts (hepatic ducts, cystic duct & common bile duct) without duplicating the gallbladder. */
+function buildBiliaryDuctsOnlyCm() {
+  return mergeBufferGeometries([
+    // Cystic duct from real gallbladder neck [-3.9, 109.5, 13.4]
+    buildVariableTubeCm([
+      [-3.90, 109.55, 13.40, 0.22],
+      [-3.15, 109.55, 13.05, 0.20],
+      [-2.60, 109.20, 12.70, 0.19],
+      [-2.35, 108.85, 12.55, 0.20],
+    ], { tubularSegments: 14, radialSegments: 10 }),
+    // Right hepatic duct
+    buildVariableTubeCm([
+      [-4.35, 112.40, 12.55, 0.16],
+      [-3.45, 111.65, 12.50, 0.19],
+      [-2.40, 110.95, 12.48, 0.22],
+    ], { tubularSegments: 12, radialSegments: 10 }),
+    // Left hepatic duct
+    buildVariableTubeCm([
+      [-0.25, 112.60, 13.10, 0.16],
+      [-1.25, 111.75, 12.80, 0.19],
+      [-2.40, 110.95, 12.48, 0.22],
+    ], { tubularSegments: 12, radialSegments: 10 }),
+    // Common hepatic duct -> Common bile duct into descending duodenum
+    buildVariableTubeCm([
+      [-2.40, 110.95, 12.48, 0.25],
+      [-2.35, 109.85, 12.52, 0.25],
+      [-2.35, 108.85, 12.55, 0.28],
+      [-2.85, 107.45, 12.40, 0.27],
+      [-3.65, 105.95, 12.15, 0.25],
+      [-4.75, 104.85, 12.05, 0.24],
+      [-5.55, 104.55, 12.10, 0.30],
+    ], { tubularSegments: 24, radialSegments: 10 }),
+  ]);
 }
 
 /**
@@ -938,7 +928,13 @@ function buildIntestineDivisionsCm(intestineCmGeo) {
 /**
  * Build all custom viewer-space geometries for the 5. Digestive System + Skeleton dedicated module.
  */
-export function buildDigestiveSystemGeometries({ bodyMeta, bodyGeos, cmToViewer = makeCmToViewerMatrix() }) {
+export function buildDigestiveSystemGeometries({
+  bodyMeta,
+  bodyGeos,
+  extraMeta = null,
+  extraGeos = null,
+  cmToViewer = makeCmToViewerMatrix(),
+}) {
   const liverEntry = bodyMeta.meshes.find(m => m.name === 'organs_liver');
   const stomachEntry = bodyMeta.meshes.find(m => m.name === 'organs_stomach');
   const intestineEntry = bodyMeta.meshes.find(m => m.name === 'organs_intestine');
@@ -947,13 +943,19 @@ export function buildDigestiveSystemGeometries({ bodyMeta, bodyGeos, cmToViewer 
   const stomachCmGeo = bodyGeos.organs_stomach.clone().applyMatrix4(makeCmMatrix(stomachEntry.sourceFrame));
   const intestineCmGeo = bodyGeos.organs_intestine.clone().applyMatrix4(makeCmMatrix(intestineEntry.sourceFrame));
 
+  const extraEsophagusCm = meshInCm(extraMeta, extraGeos, 'extra_esophagus');
+  const extraGallbladderCm = meshInCm(extraMeta, extraGeos, 'extra_gallbladder');
+  const extraPancreasCm = meshInCm(extraMeta, extraGeos, 'extra_pancreas');
+
   const cmGeometries = {
     dig_salivary_pharynx: buildSalivaryAndPharynxCm(),
-    dig_esophagus: buildEsophagusCm(),
+    dig_esophagus: extraEsophagusCm || buildEsophagusCm(),
     dig_stomach: buildStomachCm(stomachCmGeo),
     ...buildLiverLobesCm(liverCmGeo),
-    dig_gallbladder_biliary: buildGallbladderAndBiliaryCm(),
-    dig_pancreas: buildPancreasCm(),
+    dig_gallbladder_biliary: extraGallbladderCm
+      ? mergeBufferGeometries([extraGallbladderCm, buildBiliaryDuctsOnlyCm()])
+      : buildGallbladderAndBiliaryCm(),
+    dig_pancreas: extraPancreasCm || buildPancreasCm(),
     ...buildIntestineDivisionsCm(intestineCmGeo),
   };
 

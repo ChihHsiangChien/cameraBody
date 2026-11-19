@@ -3,7 +3,9 @@ import {
   makeCmMatrix,
   makeCmToViewerMatrix,
   mergeBufferGeometries,
+  meshInCm,
   splitGeometryByComponents,
+  splitGeometryByTriangles,
 } from '../neuro-builder.js';
 
 export const URINARY_META = Object.freeze({
@@ -67,7 +69,7 @@ export const URINARY_CATEGORIES = Object.freeze([
 ]);
 
 export const URINARY_STRUCTURES = Object.freeze([
-  // --- 1. 左右腎臟與腎盂構造 (Kidneys, Renal Pelvis & Adrenal Caps) ---
+  // --- 1. 左右腎臟與腎盂構造 (Kidneys & Renal Pelvis) ---
   {
     id: 'leftKidney',
     category: 'kidneys',
@@ -103,26 +105,12 @@ export const URINARY_STRUCTURES = Object.freeze([
     nameEn: 'Renal Pelvis, Major & Minor Calyces',
     pinZh: '腎盂與腎盞',
     pinEn: 'Renal Pelvis & Calyces',
-    anchorL: [0.0315, -0.0920, -0.0020],
+    anchorL: [0.0540, -0.0840, -0.0090],
     bundle: 'custom',
     meshes: ['urinary_renal_pelvis'],
     color: '#f3c969',
     descZh: '位於腎竇與腎門內之集尿構造：小腎盞包圍腎乳頭收集集尿管排出之尿液，匯合成 2–3 個大腎盞，再於腎門處匯聚成扁平漏斗狀的腎盂，向下平滑延續為輸尿管。',
     descEn: 'Funnel-shaped urinary collecting system within the renal sinus; minor calyces cup each renal papilla, converging into major calyces and the renal pelvis at the hilum before tapering into the ureter.',
-  },
-  {
-    id: 'adrenalCaps',
-    category: 'kidneys',
-    nameZh: '左右腎上腺 (分泌醛固酮調控遠曲小管鈉水再吸收)',
-    nameEn: 'Left & Right Adrenal Glands (Aldosterone Regulation)',
-    pinZh: '腎上腺 (醛固酮調控)',
-    pinEn: 'Adrenal Glands',
-    anchorL: [0.0430, -0.0290, -0.0025],
-    bundle: 'custom',
-    meshes: ['urinary_adrenal_caps'],
-    color: '#f59e0b',
-    descZh: '覆蓋於左右雙腎上極之內分泌腺體（左呈半月形、右呈三角形），其腎上腺皮質球狀帶受腎素-血管張力素系統 (RAAS) 刺激分泌醛固酮 (Aldosterone)，直接作用於腎臟遠曲小管與集尿管以促進鈉離子與水分留存並排鉀。',
-    descEn: 'Paired suprarenal endocrine glands capping the superior poles of both kidneys; the zona glomerulosa responds to the renin-angiotensin system (RAAS) by secreting aldosterone to promote renal sodium and water reabsorption.',
   },
 
   // --- 2. 輸尿管・膀胱・尿道與括約肌 (Urinary Tract) ---
@@ -133,7 +121,7 @@ export const URINARY_STRUCTURES = Object.freeze([
     nameEn: 'Left & Right Ureters',
     pinZh: '左右輸尿管',
     pinEn: 'Left & Right Ureters',
-    anchorL: [0.0305, -0.1950, 0.0085],
+    anchorL: [0.0320, -0.1930, 0.0090],
     bundle: 'custom',
     meshes: ['urinary_ureters'],
     color: '#facc15',
@@ -147,7 +135,7 @@ export const URINARY_STRUCTURES = Object.freeze([
     nameEn: 'Urinary Bladder (Detrusor Muscle, Trigone & Neck)',
     pinZh: '膀胱 (逼尿肌與膀胱三角)',
     pinEn: 'Urinary Bladder',
-    anchorL: [0.0000, -0.3320, 0.0460],
+    anchorL: [0.0000, -0.3350, 0.0180],
     bundle: 'custom',
     meshes: ['urinary_bladder'],
     color: '#e07a5f',
@@ -161,7 +149,7 @@ export const URINARY_STRUCTURES = Object.freeze([
     nameEn: 'Urethra & Internal / External Urethral Sphincters',
     pinZh: '尿道與括約肌',
     pinEn: 'Urethra & Sphincter',
-    anchorL: [0.0000, -0.3780, 0.0410],
+    anchorL: [0.0000, -0.3960, 0.0440],
     bundle: 'custom',
     meshes: ['urinary_urethra'],
     color: '#d96850',
@@ -177,7 +165,7 @@ export const URINARY_STRUCTURES = Object.freeze([
     nameEn: 'Renal Arteries & Abdominal Aorta',
     pinZh: '腎動脈與腹主動脈',
     pinEn: 'Renal Arteries & Abdominal Aorta',
-    anchorL: [0.0065, -0.0650, 0.0120],
+    anchorL: [0.0060, -0.0910, 0.0210],
     bundle: 'custom',
     meshes: ['urinary_renal_arteries'],
     color: '#ef4444',
@@ -191,11 +179,11 @@ export const URINARY_STRUCTURES = Object.freeze([
     nameEn: 'Renal Veins & Inferior Vena Cava',
     pinZh: '腎靜脈與下腔靜脈',
     pinEn: 'Renal Veins & Inferior Vena Cava',
-    anchorL: [-0.0155, -0.0800, 0.0160],
+    anchorL: [-0.0160, -0.0960, 0.0260],
     bundle: 'custom',
     meshes: ['urinary_renal_veins'],
     color: '#3b82f6',
-    descZh: '行走於腎動脈前方的粗大靜脈幹，收集腎臟過濾並完成腎小管再吸收後之潔淨血液，由腎門穿出後直接匯入腹腔右側的下腔靜脈（左腎靜脈較長，橫越腹主動脈前方並接收左腎上腺靜脈與左性腺靜脈）。',
+    descZh: '行走於腎動脈前方的粗大靜脈幹，收集腎臟過濾並完成腎小管再吸收後之潔淨血液，由腎門穿出後直接匯入腹腔右側的下腔靜脈（左腎靜脈較長，橫越腹主動脈前方匯入下腔靜脈）。',
     descEn: 'Large veins anterior to the renal arteries draining filtered blood from both kidneys into the inferior vena cava (IVC); the longer left renal vein crosses anterior to the abdominal aorta below the superior mesenteric artery.',
   },
 
@@ -219,7 +207,7 @@ export const URINARY_STRUCTURES = Object.freeze([
     bundle: 'custom',
     meshes: ['spine_thoracic'],
     color: '#dfd7ca',
-    descZh: '由第 1 至第 12 胸椎 (T1–T12) 獨立組成；下段胸椎 (T11–T12) 為左腎上極與腎上腺之後方骨骼定位基準。',
+    descZh: '由第 1 至第 12 胸椎 (T1–T12) 獨立組成；下段胸椎 (T11–T12) 為左腎上極之後方骨骼定位基準。',
     descEn: 'Twelve thoracic vertebrae (T1–T12) isolated from the ribcage; T11–T12 serve as the posterior skeletal landmark for the superior poles of the kidneys.',
   },
   {
@@ -377,15 +365,20 @@ function buildEllipsoidCm(center, radii, eulerRadians = [0, 0, 0], widthSeg = 22
 /**
  * Build all custom viewer-space geometries for the 3D Urinary System page:
  * - urinary_kidney_L, urinary_kidney_R (split from body.json organs_kidneys)
- * - urinary_renal_pelvis (minor/major calyces + funnel-shaped renal pelvis at both renal hila)
- * - urinary_adrenal_caps (left crescentic & right pyramidal suprarenal glands atop the kidneys)
- * - urinary_ureters (bilateral 25-30 cm retroperitoneal tubes from renal pelvis to posterior bladder trigone)
- * - urinary_bladder (detrusor body, apex, fundus/trigone, and bladder neck behind pubic symphysis)
- * - urinary_urethra (urethral canal + internal & external urethral sphincter rings)
- * - urinary_renal_arteries (abdominal aorta + bilateral renal arteries & segmental hilar branches)
- * - urinary_renal_veins (inferior vena cava + bilateral renal veins & hilar tributaries)
+ * - urinary_renal_pelvis (minor/major calyces + renal pelvis at both renal hila from BodyParts3D)
+ * - urinary_ureters (bilateral retroperitoneal ureters from BodyParts3D)
+ * - urinary_bladder (urinary bladder from BodyParts3D)
+ * - urinary_urethra (urethra from BodyParts3D)
+ * - urinary_renal_arteries (abdominal aorta + bilateral renal arteries from BodyParts3D)
+ * - urinary_renal_veins (inferior vena cava + bilateral renal veins from BodyParts3D)
  */
-export function buildUrinarySystemGeometries({ bodyMeta, bodyGeos, cmToViewer = makeCmToViewerMatrix() }) {
+export function buildUrinarySystemGeometries({
+  bodyMeta,
+  bodyGeos,
+  extraMeta = null,
+  extraGeos = null,
+  cmToViewer = makeCmToViewerMatrix(),
+}) {
   const finalizeCm = geo => {
     const out = geo.clone().applyMatrix4(cmToViewer);
     out.computeVertexNormals();
@@ -395,8 +388,6 @@ export function buildUrinarySystemGeometries({ bodyMeta, bodyGeos, cmToViewer = 
   };
 
   // 1. Split organs_kidneys into Left Kidney (cx > 0) and Right Kidney (cx < 0) in BodyParts3D cm
-  // Kidney L cm center ~ [5.24, 106.57, 7.65] (minY 101.46, maxY 111.76)
-  // Kidney R cm center ~ [-6.19, 105.15, 7.39] (minY 99.96, maxY 110.18)
   const kidneyEntry = bodyMeta.meshes.find(m => m.name === 'organs_kidneys');
   const kidneysCm = bodyGeos.organs_kidneys.clone().applyMatrix4(makeCmMatrix(kidneyEntry.sourceFrame));
   const splitKidneys = splitGeometryByComponents(kidneysCm, ({ cx }) =>
@@ -406,179 +397,98 @@ export function buildUrinarySystemGeometries({ bodyMeta, bodyGeos, cmToViewer = 
   const urinary_kidney_L = finalizeCm(splitKidneys.urinary_kidney_L || kidneysCm);
   const urinary_kidney_R = finalizeCm(splitKidneys.urinary_kidney_R || kidneysCm);
 
-  // 2. Renal Pelvis & Major/Minor Calyces (urinary_renal_pelvis)
-  const pelvisParts = [];
-  // Left renal pelvis & calyces (hilum around [3.1, 106.3, 7.7])
-  pelvisParts.push(
-    // Left renal pelvis funnel
-    buildEllipsoidCm([3.20, 106.10, 7.70], [1.15, 1.55, 0.80], [0, 0, -0.38]),
-    // Left superior, middle, and inferior major/minor calyces radiating into renal sinus
-    buildTubeCm([[4.80, 109.20, 7.65], [3.95, 107.70, 7.68], [3.15, 106.35, 7.72]], 0.34, 12, 8),
-    buildTubeCm([[5.15, 106.60, 7.60], [4.10, 106.35, 7.68], [3.10, 106.00, 7.72]], 0.36, 12, 8),
-    buildTubeCm([[4.75, 103.80, 7.62], [3.85, 104.90, 7.68], [3.05, 105.65, 7.75]], 0.34, 12, 8),
-    // Right renal pelvis funnel (hilum around [-4.0, 104.8, 7.5])
-    buildEllipsoidCm([-4.05, 104.65, 7.50], [1.15, 1.55, 0.80], [0, 0, 0.38]),
-    // Right superior, middle, and inferior major/minor calyces
-    buildTubeCm([[-5.70, 107.75, 7.42], [-4.80, 106.25, 7.46], [-3.95, 104.90, 7.52]], 0.34, 12, 8),
-    buildTubeCm([[-6.05, 105.15, 7.38], [-5.00, 104.90, 7.46], [-3.90, 104.55, 7.52]], 0.36, 12, 8),
-    buildTubeCm([[-5.65, 102.40, 7.40], [-4.75, 103.50, 7.46], [-3.85, 104.20, 7.55]], 0.34, 12, 8)
+  // 2 & 3. Renal Pelvis & Calyces + Ureters from real BodyParts3D extra_ureters (or smooth fallback)
+  const extraUretersCm = meshInCm(extraMeta, extraGeos, 'extra_ureters');
+  let urinary_renal_pelvis;
+  let urinary_ureters;
+
+  if (extraUretersCm) {
+    const splitUreter = splitGeometryByTriangles(extraUretersCm, ({ cx, cy }) =>
+      ((cy > 102.5 && cx > 3.6) || (cy > 102.0 && cx < -4.2)) ? 'pelvis' : 'ureters'
+    );
+    urinary_renal_pelvis = finalizeCm(splitUreter.pelvis || extraUretersCm);
+    urinary_ureters = finalizeCm(splitUreter.ureters || extraUretersCm);
+  } else {
+    const pelvisParts = [
+      buildEllipsoidCm([3.20, 106.10, 7.70], [1.15, 1.55, 0.80], [0, 0, -0.38]),
+      buildTubeCm([[4.80, 109.20, 7.65], [3.95, 107.70, 7.68], [3.15, 106.35, 7.72]], 0.34, 12, 8),
+      buildTubeCm([[5.15, 106.60, 7.60], [4.10, 106.35, 7.68], [3.10, 106.00, 7.72]], 0.36, 12, 8),
+      buildTubeCm([[4.75, 103.80, 7.62], [3.85, 104.90, 7.68], [3.05, 105.65, 7.75]], 0.34, 12, 8),
+      buildEllipsoidCm([-4.05, 104.65, 7.50], [1.15, 1.55, 0.80], [0, 0, 0.38]),
+      buildTubeCm([[-5.70, 107.75, 7.42], [-4.80, 106.25, 7.46], [-3.95, 104.90, 7.52]], 0.34, 12, 8),
+      buildTubeCm([[-6.05, 105.15, 7.38], [-5.00, 104.90, 7.46], [-3.90, 104.55, 7.52]], 0.36, 12, 8),
+      buildTubeCm([[-5.65, 102.40, 7.40], [-4.75, 103.50, 7.46], [-3.85, 104.20, 7.55]], 0.34, 12, 8),
+    ];
+    urinary_renal_pelvis = finalizeCm(mergeBufferGeometries(pelvisParts));
+
+    const ureterParts = [
+      buildTubeCm([[2.85, 105.10, 7.78], [2.75, 101.50, 8.15], [2.95, 97.20, 8.65], [3.15, 92.80, 9.35], [3.35, 88.80, 10.10], [3.10, 84.80, 10.45], [2.15, 81.90, 11.15], [1.45, 81.10, 11.75]], 0.25, 36, 10),
+      buildTubeCm([[-3.65, 103.65, 7.60], [-3.35, 100.20, 8.05], [-3.20, 96.20, 8.60], [-3.25, 92.20, 9.30], [-3.40, 88.40, 10.05], [-3.15, 84.60, 10.45], [-2.15, 81.85, 11.15], [-1.45, 81.10, 11.75]], 0.25, 36, 10),
+    ];
+    urinary_ureters = finalizeCm(mergeBufferGeometries(ureterParts));
+  }
+
+  // 4. Urinary Bladder (urinary_bladder)
+  const extraBladderCm = meshInCm(extraMeta, extraGeos, 'extra_bladder');
+  const urinary_bladder = finalizeCm(
+    extraBladderCm ||
+      mergeBufferGeometries([
+        buildEllipsoidCm([0.0, 82.05, 12.55], [2.75, 2.35, 2.25], [0.22, 0, 0], 28, 20),
+        buildEllipsoidCm([0.0, 83.25, 13.75], [1.75, 1.40, 1.55], [0.45, 0, 0], 22, 16),
+        buildEllipsoidCm([0.0, 80.95, 11.75], [2.15, 1.55, 1.50], [-0.15, 0, 0], 22, 16),
+        buildEllipsoidCm([0.0, 79.55, 12.20], [1.15, 1.15, 1.10], [0.10, 0, 0], 18, 14),
+      ])
   );
-  const urinary_renal_pelvis = finalizeCm(mergeBufferGeometries(pelvisParts));
 
-  // 3. Left & Right Adrenal / Suprarenal Glands (urinary_adrenal_caps)
-  // Left adrenal gland (semilunar/crescentic cap on superomedial pole of left kidney)
-  // Right adrenal gland (pyramidal/triangular cap on superior pole of right kidney)
-  const adrenalParts = [
-    buildEllipsoidCm([4.35, 112.15, 7.70], [1.55, 1.25, 0.85], [0.08, -0.15, 0.48]),
-    buildEllipsoidCm([3.55, 111.35, 7.80], [1.10, 1.05, 0.78], [0.05, -0.10, 0.72]),
-    buildEllipsoidCm([-5.25, 110.65, 7.48], [1.50, 1.35, 0.85], [0.08, 0.15, -0.42]),
-    buildEllipsoidCm([-4.45, 109.90, 7.58], [1.10, 1.05, 0.78], [0.05, 0.10, -0.68]),
-  ];
-  const urinary_adrenal_caps = finalizeCm(mergeBufferGeometries(adrenalParts));
+  // 5. Urethra & Sphincters (urinary_urethra)
+  const extraUrethraCm = meshInCm(extraMeta, extraGeos, 'extra_urethra');
+  const urinary_urethra = finalizeCm(
+    extraUrethraCm ||
+      mergeBufferGeometries([
+        buildTubeCm([[0.0, 79.40, 12.22], [0.0, 78.10, 12.18], [0.0, 76.80, 12.28], [0.0, 75.50, 12.55], [0.0, 74.35, 12.88]], 0.42, 20, 12),
+        buildEllipsoidCm([0.0, 79.05, 12.20], [0.92, 0.48, 0.88], [0.08, 0, 0], 20, 14),
+        buildEllipsoidCm([0.0, 77.25, 12.22], [1.15, 0.55, 1.05], [0.05, 0, 0], 20, 14),
+      ])
+  );
 
-  // 4. Left & Right Ureters (urinary_ureters)
-  // Descend from ureteropelvic junction (~104-105 cm) along anterior psoas major, cross pelvic brim (~90 cm),
-  // curve posterolaterally into pelvic cavity and enter posterolateral base of urinary bladder (~81.8 cm).
-  const ureterParts = [
-    // Left ureter
-    buildTubeCm([
-      [2.85, 105.10, 7.78],
-      [2.75, 101.50, 8.15],
-      [2.95, 97.20, 8.65],
-      [3.15, 92.80, 9.35],
-      [3.35, 88.80, 10.10],
-      [3.10, 84.80, 10.45],
-      [2.15, 81.90, 11.15],
-      [1.45, 81.10, 11.75],
-    ], 0.25, 36, 10),
-    // Right ureter
-    buildTubeCm([
-      [-3.65, 103.65, 7.60],
-      [-3.35, 100.20, 8.05],
-      [-3.20, 96.20, 8.60],
-      [-3.25, 92.20, 9.30],
-      [-3.40, 88.40, 10.05],
-      [-3.15, 84.60, 10.45],
-      [-2.15, 81.85, 11.15],
-      [-1.45, 81.10, 11.75],
-    ], 0.25, 36, 10),
-  ];
-  const urinary_ureters = finalizeCm(mergeBufferGeometries(ureterParts));
+  // 6. Renal Arteries & Abdominal Aorta (urinary_renal_arteries)
+  const extraAortaCm = meshInCm(extraMeta, extraGeos, 'extra_aorta');
+  const extraRenalArtCm = meshInCm(extraMeta, extraGeos, 'extra_renal_arteries');
+  let urinary_renal_arteries;
+  if (extraAortaCm && extraRenalArtCm) {
+    const abdAorta = splitGeometryByTriangles(extraAortaCm, ({ cy }) => (cy <= 116.0 ? 'abd' : null)).abd;
+    urinary_renal_arteries = finalizeCm(mergeBufferGeometries([abdAorta, extraRenalArtCm].filter(Boolean)));
+  } else {
+    const arteryParts = [
+      buildTubeCm([[0.35, 117.20, 8.65], [0.45, 112.50, 8.85], [0.48, 107.50, 9.00], [0.42, 102.00, 9.15], [0.30, 96.80, 9.25], [0.20, 93.80, 9.20]], 0.82, 28, 12),
+      buildTubeCm([[0.20, 94.10, 9.20], [1.85, 91.20, 9.25], [3.20, 88.80, 9.40]], 0.54, 12, 10),
+      buildTubeCm([[0.20, 94.10, 9.20], [-1.55, 91.20, 9.25], [-2.95, 88.80, 9.40]], 0.54, 12, 10),
+      buildTubeCm([[0.55, 107.80, 8.95], [1.85, 107.45, 8.45], [3.15, 106.95, 7.95], [4.20, 106.75, 7.75]], 0.42, 16, 10),
+      buildTubeCm([[0.35, 107.30, 8.92], [-1.30, 106.80, 8.35], [-2.85, 106.10, 7.88], [-4.15, 105.45, 7.65], [-5.10, 105.25, 7.52]], 0.42, 18, 10),
+    ];
+    urinary_renal_arteries = finalizeCm(mergeBufferGeometries(arteryParts));
+  }
 
-  // 5. Urinary Bladder (urinary_bladder)
-  // Situated in anterior pelvic cavity behind pubic symphysis (Y: 79.2–84.6 cm, Z: 10.8–14.5 cm)
-  const bladderParts = [
-    // Main bladder body (detrusor dome & lateral walls)
-    buildEllipsoidCm([0.0, 82.05, 12.55], [2.75, 2.35, 2.25], [0.22, 0, 0], 28, 20),
-    // Anterior-superior bladder apex (pointing toward pubic symphysis / median umbilical ligament / urachus)
-    buildEllipsoidCm([0.0, 83.25, 13.75], [1.75, 1.40, 1.55], [0.45, 0, 0], 22, 16),
-    // Posterior-inferior bladder fundus & trigone region receiving both ureters
-    buildEllipsoidCm([0.0, 80.95, 11.75], [2.15, 1.55, 1.50], [-0.15, 0, 0], 22, 16),
-    // Funnel-shaped bladder neck tapering inferiorly to internal urethral orifice
-    buildEllipsoidCm([0.0, 79.55, 12.20], [1.15, 1.15, 1.10], [0.10, 0, 0], 18, 14),
-  ];
-  const urinary_bladder = finalizeCm(mergeBufferGeometries(bladderParts));
-
-  // 6. Urethra & Internal / External Urethral Sphincters (urinary_urethra)
-  const urethraParts = [
-    // Urethral lumen & muscular wall descending from bladder neck through pelvic floor
-    buildTubeCm([
-      [0.0, 79.40, 12.22],
-      [0.0, 78.10, 12.18],
-      [0.0, 76.80, 12.28],
-      [0.0, 75.50, 12.55],
-      [0.0, 74.35, 12.88],
-    ], 0.42, 20, 12),
-    // Internal urethral sphincter (involuntary smooth muscle ring at bladder neck junction)
-    buildEllipsoidCm([0.0, 79.05, 12.20], [0.92, 0.48, 0.88], [0.08, 0, 0], 20, 14),
-    // External urethral sphincter (voluntary striated muscle ring in urogenital diaphragm)
-    buildEllipsoidCm([0.0, 77.25, 12.22], [1.15, 0.55, 1.05], [0.05, 0, 0], 20, 14),
-  ];
-  const urinary_urethra = finalizeCm(mergeBufferGeometries(urethraParts));
-
-  // 7. Renal Arteries & Abdominal Aorta (urinary_renal_arteries)
-  // Abdominal aorta runs slightly left of midline (X ~ +0.45 cm, Y: 117 down to 93.5 cm, Z ~ 8.85 cm)
-  const arteryParts = [
-    // Abdominal aorta trunk
-    buildTubeCm([
-      [0.35, 117.20, 8.65],
-      [0.45, 112.50, 8.85],
-      [0.48, 107.50, 9.00],
-      [0.42, 102.00, 9.15],
-      [0.30, 96.80, 9.25],
-      [0.20, 93.80, 9.20],
-    ], 0.82, 28, 12),
-    // Aortic bifurcation stubs (common iliac origins)
-    buildTubeCm([[0.20, 94.10, 9.20], [1.85, 91.20, 9.25], [3.20, 88.80, 9.40]], 0.54, 12, 10),
-    buildTubeCm([[0.20, 94.10, 9.20], [-1.55, 91.20, 9.25], [-2.95, 88.80, 9.40]], 0.54, 12, 10),
-    // Left renal artery (shorter, direct course into left renal hilum)
-    buildTubeCm([
-      [0.55, 107.80, 8.95],
-      [1.85, 107.45, 8.45],
-      [3.15, 106.95, 7.95],
-      [4.20, 106.75, 7.75],
-    ], 0.42, 16, 10),
-    // Left segmental renal artery branches (superior & inferior hilar branches)
-    buildTubeCm([[3.15, 106.95, 7.95], [4.35, 108.45, 7.75], [5.20, 109.60, 7.65]], 0.25, 10, 8),
-    buildTubeCm([[3.15, 106.95, 7.95], [4.30, 105.35, 7.75], [5.05, 104.10, 7.65]], 0.25, 10, 8),
-    // Right renal artery (longer, passes posterior to IVC into right renal hilum)
-    buildTubeCm([
-      [0.35, 107.30, 8.92],
-      [-1.30, 106.80, 8.35],
-      [-2.85, 106.10, 7.88],
-      [-4.15, 105.45, 7.65],
-      [-5.10, 105.25, 7.52],
-    ], 0.42, 18, 10),
-    // Right segmental renal artery branches
-    buildTubeCm([[-4.05, 105.50, 7.68], [-5.15, 107.05, 7.52], [-6.00, 108.15, 7.45]], 0.25, 10, 8),
-    buildTubeCm([[-4.05, 105.50, 7.68], [-5.10, 103.95, 7.52], [-5.90, 102.75, 7.45]], 0.25, 10, 8),
-  ];
-  const urinary_renal_arteries = finalizeCm(mergeBufferGeometries(arteryParts));
-
-  // 8. Renal Veins & Inferior Vena Cava (urinary_renal_veins)
-  // Inferior Vena Cava runs to the right of aorta (X ~ -1.55 cm, Y: 92.5 up to 118.0 cm, Z ~ 9.35 cm)
-  const veinParts = [
-    // Inferior Vena Cava (IVC) trunk
-    buildTubeCm([
-      [-1.40, 92.80, 9.20],
-      [-1.55, 97.50, 9.35],
-      [-1.65, 103.50, 9.45],
-      [-1.65, 108.50, 9.50],
-      [-1.55, 113.50, 9.55],
-      [-1.45, 118.20, 9.65],
-    ], 0.94, 28, 12),
-    // Common iliac vein confluence stubs into IVC
-    buildTubeCm([[2.45, 88.80, 9.15], [0.55, 91.10, 9.18], [-1.35, 93.10, 9.20]], 0.56, 12, 10),
-    buildTubeCm([[-3.25, 88.80, 9.15], [-2.35, 91.10, 9.18], [-1.45, 93.10, 9.20]], 0.56, 12, 10),
-    // Left renal vein (longer, crosses anterior to abdominal aorta at Z ~ 9.85 cm into IVC)
-    buildTubeCm([
-      [4.25, 106.25, 8.15],
-      [3.05, 106.45, 8.65],
-      [1.65, 106.75, 9.65],
-      [0.25, 106.85, 9.95],
-      [-1.55, 106.75, 9.55],
-    ], 0.50, 20, 10),
-    // Left renal hilar venous tributaries + left suprarenal & gonadal venous stubs
-    buildTubeCm([[5.15, 108.35, 7.95], [4.15, 107.15, 8.15], [3.10, 106.45, 8.60]], 0.28, 10, 8),
-    buildTubeCm([[5.05, 104.25, 7.95], [4.05, 105.45, 8.15], [3.10, 106.45, 8.60]], 0.28, 10, 8),
-    // Right renal vein (short, direct course from right renal hilum into IVC)
-    buildTubeCm([
-      [-5.15, 104.80, 7.95],
-      [-3.95, 105.15, 8.45],
-      [-2.75, 105.55, 9.05],
-      [-1.65, 105.85, 9.48],
-    ], 0.50, 14, 10),
-    // Right renal hilar venous tributaries
-    buildTubeCm([[-6.00, 106.95, 7.78], [-5.00, 105.75, 7.98], [-3.95, 105.15, 8.45]], 0.28, 10, 8),
-    buildTubeCm([[-5.90, 102.95, 7.78], [-4.95, 104.05, 7.98], [-3.95, 105.15, 8.45]], 0.28, 10, 8),
-  ];
-  const urinary_renal_veins = finalizeCm(mergeBufferGeometries(veinParts));
+  // 7. Renal Veins & Inferior Vena Cava (urinary_renal_veins)
+  const extraVenaCavaCm = meshInCm(extraMeta, extraGeos, 'extra_vena_cava');
+  const extraRenalVeinCm = meshInCm(extraMeta, extraGeos, 'extra_renal_veins');
+  let urinary_renal_veins;
+  if (extraVenaCavaCm && extraRenalVeinCm) {
+    const ivc = splitGeometryByTriangles(extraVenaCavaCm, ({ cy }) => (cy <= 116.5 ? 'ivc' : null)).ivc;
+    urinary_renal_veins = finalizeCm(mergeBufferGeometries([ivc, extraRenalVeinCm].filter(Boolean)));
+  } else {
+    const veinParts = [
+      buildTubeCm([[-1.40, 92.80, 9.20], [-1.55, 97.50, 9.35], [-1.65, 103.50, 9.45], [-1.65, 108.50, 9.50], [-1.55, 113.50, 9.55], [-1.45, 118.20, 9.65]], 0.94, 28, 12),
+      buildTubeCm([[4.25, 106.25, 8.15], [3.05, 106.45, 8.65], [1.65, 106.75, 9.65], [0.25, 106.85, 9.95], [-1.55, 106.75, 9.55]], 0.50, 20, 10),
+      buildTubeCm([[-5.15, 104.80, 7.95], [-3.95, 105.15, 8.45], [-2.75, 105.55, 9.05], [-1.65, 105.85, 9.48]], 0.50, 14, 10),
+    ];
+    urinary_renal_veins = finalizeCm(mergeBufferGeometries(veinParts));
+  }
 
   return {
     urinary_kidney_L,
     urinary_kidney_R,
     urinary_renal_pelvis,
-    urinary_adrenal_caps,
     urinary_ureters,
     urinary_bladder,
     urinary_urethra,

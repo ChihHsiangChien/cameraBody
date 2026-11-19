@@ -745,3 +745,74 @@ export function buildHandBonesAndNerves(headGeos, periMeta, periGeos, cmToViewer
     pn_hand_L: mergeBufferGeometries(leftNerveGeos),
   };
 }
+
+/**
+ * Extract a named mesh from an anatomy bundle (`meta` + `geos`) into BodyParts3D cm space.
+ */
+export function meshInCm(meta, geos, name) {
+  const geo = geos?.[name];
+  const entry = meta?.meshes?.find(m => m.name === name);
+  if (!geo || !entry?.sourceFrame) return null;
+  return geo.clone().applyMatrix4(makeCmMatrix(entry.sourceFrame));
+}
+
+/**
+ * Partition an indexed BufferGeometry's triangles into named buckets using a triangle classifier.
+ */
+export function splitGeometryByTriangles(geometry, classifyTriangle) {
+  if (!geometry?.index || !geometry.attributes?.position) return {};
+  const pos = geometry.attributes.position;
+  const idx = geometry.index.array;
+  const nv = pos.count;
+  const trisByBucket = new Map();
+
+  for (let i = 0; i < idx.length; i += 3) {
+    const i0 = idx[i];
+    const i1 = idx[i + 1];
+    const i2 = idx[i + 2];
+    const cx = (pos.getX(i0) + pos.getX(i1) + pos.getX(i2)) / 3;
+    const cy = (pos.getY(i0) + pos.getY(i1) + pos.getY(i2)) / 3;
+    const cz = (pos.getZ(i0) + pos.getZ(i1) + pos.getZ(i2)) / 3;
+    const bucket = classifyTriangle({ cx, cy, cz, i0, i1, i2 });
+    if (!bucket) continue;
+    if (!trisByBucket.has(bucket)) trisByBucket.set(bucket, []);
+    trisByBucket.get(bucket).push(i0, i1, i2);
+  }
+
+  const result = {};
+  for (const [bucket, triIndices] of trisByBucket.entries()) {
+    const remap = new Int32Array(nv).fill(-1);
+    const coords = [];
+    const localIdx = [];
+    for (let i = 0; i < triIndices.length; i++) {
+      const oldV = triIndices[i];
+      let newV = remap[oldV];
+      if (newV < 0) {
+        newV = coords.length / 3;
+        remap[oldV] = newV;
+        coords.push(pos.getX(oldV), pos.getY(oldV), pos.getZ(oldV));
+      }
+      localIdx.push(newV);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(coords), 3));
+    const IndexArray = coords.length / 3 > 65535 ? Uint32Array : Uint16Array;
+    g.setIndex(new THREE.BufferAttribute(new IndexArray(localIdx), 1));
+    g.computeVertexNormals();
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    result[bucket] = g;
+  }
+  return result;
+}
+
+/**
+ * Transform a BodyParts3D cm-space geometry into normalized viewer coordinates with normals and bounds.
+ */
+export function finalizeCmGeometry(geoCm, cmToViewer = makeCmToViewerMatrix()) {
+  const out = geoCm.clone().applyMatrix4(cmToViewer);
+  out.computeVertexNormals();
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
+  return out;
+}
