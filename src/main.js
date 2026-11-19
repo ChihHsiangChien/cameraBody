@@ -1,8 +1,7 @@
 import { setLanguage, resolveLanguage, translateDocument, t } from './i18n.js';
-import { CATEGORIES, STRUCTURES } from './neuro-data.js';
-import { createNeuroViewer } from './neuro-viewer.js';
+import { createNeuroViewer, SYSTEM_PAGES } from './neuro-viewer.js';
 
-// Setup language
+// Setup language and initial system page from URL (?page= or #page=)
 const query = new URLSearchParams(location.search);
 const hash = new URLSearchParams(location.hash.slice(1));
 let currentLang = resolveLanguage({
@@ -12,13 +11,19 @@ let currentLang = resolveLanguage({
 setLanguage(currentLang);
 translateDocument(document.documentElement);
 
+const requestedPage = query.get('page') || hash.get('page') || 'nervous';
+let currentPageId = SYSTEM_PAGES[requestedPage] ? requestedPage : 'nervous';
+
 const langToggle = document.getElementById('language-toggle');
 if (langToggle) {
-  langToggle.textContent = currentLang === 'zh-Hant' ? 'English' : '中文';
+  langToggle.textContent = currentLang === 'en' ? '中文' : 'English';
+  langToggle.lang = currentLang === 'en' ? 'zh-Hant' : 'en';
+  langToggle.setAttribute('aria-label', currentLang === 'en' ? '將介面切換為中文' : 'Switch the interface to English');
   langToggle.addEventListener('click', () => {
-    const nextLang = currentLang === 'zh-Hant' ? 'en' : 'zh-Hant';
+    const nextLang = currentLang === 'en' ? 'zh' : 'en';
     const url = new URL(location.href);
     url.searchParams.set('lang', nextLang);
+    url.searchParams.set('page', currentPageId);
     location.href = url.toString();
   });
 }
@@ -28,6 +33,10 @@ const stage = document.getElementById('stage');
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingProgress = document.getElementById('loading-progress');
 const loadingText = document.getElementById('loading-text');
+
+const brandMainTitle = document.querySelector('.brand-main-title');
+const brandSubTitle = document.querySelector('.brand-sub-title');
+const brainModeSection = document.querySelector('.brain-mode-section');
 
 const sidebar = document.getElementById('neuro-sidebar');
 const sidebarToggle = document.getElementById('sidebar-toggle');
@@ -43,6 +52,8 @@ const inspectorHideBtn = document.getElementById('inspector-hide-btn');
 const inspectorCloseBtn = document.getElementById('inspector-close-btn');
 
 const ghostBonesCheckbox = document.getElementById('ghost-bones-toggle');
+const calloutPinsCheckbox = document.getElementById('callout-pins-toggle');
+const brainPinsCheckbox = document.getElementById('brain-pins-toggle');
 const silhouetteCheckbox = document.getElementById('silhouette-toggle');
 const silhouetteSlider = document.getElementById('silhouette-slider');
 
@@ -53,10 +64,11 @@ const resetViewBtn = document.getElementById('btn-reset-view');
 
 let currentSelectedStructure = null;
 
-// Initialize Neuro 3D Viewer
+// Initialize Multi-System 3D Viewer
 const viewer = createNeuroViewer({
   container: stage,
   lang: currentLang,
+  initialPage: currentPageId,
   onProgress: ({ percent, text, error }) => {
     if (loadingProgress) loadingProgress.style.width = `${percent}%`;
     if (loadingText) loadingText.textContent = t(text);
@@ -77,7 +89,8 @@ const viewer = createNeuroViewer({
     }
     if (!inspector) return;
 
-    const cat = CATEGORIES.find(c => c.id === structure.category);
+    const activeConfig = SYSTEM_PAGES[currentPageId] || SYSTEM_PAGES.nervous;
+    const cat = activeConfig.categories.find(c => c.id === structure.category);
     if (inspectorCategory) {
       inspectorCategory.textContent = `${cat?.icon || ''} ${currentLang === 'en' ? cat?.nameEn : cat?.nameZh}`;
       inspectorCategory.style.borderColor = structure.color;
@@ -109,15 +122,20 @@ if (inspectorHideBtn) {
   });
 }
 
-// Build Sidebar Checklist UI
-const structureListContainer = document.getElementById('structure-hierarchy');
-if (structureListContainer) {
+// Render Sidebar Checklist UI for the active system
+function renderStructureHierarchy(pageId) {
+  const structureListContainer = document.getElementById('structure-hierarchy');
+  if (!structureListContainer) return;
   structureListContainer.innerHTML = '';
 
-  for (const cat of CATEGORIES) {
+  const pageConfig = SYSTEM_PAGES[pageId] || SYSTEM_PAGES.nervous;
+  const categories = pageConfig.categories;
+  const structures = pageConfig.structures;
+
+  for (const cat of categories) {
     if (cat.id === 'silhouette') continue; // Handled separately in top section
 
-    const catStructures = STRUCTURES.filter(s => s.category === cat.id);
+    const catStructures = structures.filter(s => s.category === cat.id);
     if (catStructures.length === 0) continue;
 
     const groupSection = document.createElement('section');
@@ -130,7 +148,7 @@ if (structureListContainer) {
 
     const titleDiv = document.createElement('div');
     titleDiv.className = 'category-title';
-    titleDiv.innerHTML = `<span class="cat-icon">${cat.icon}</span> <span class="cat-name">${currentLang === 'en' ? cat.nameEn : cat.nameZh}</span>`;
+    titleDiv.innerHTML = `<span class="cat-icon">${cat.icon || '●'}</span> <span class="cat-name">${currentLang === 'en' ? cat.nameEn : cat.nameZh}</span>`;
 
     const groupActions = document.createElement('div');
     groupActions.className = 'group-actions';
@@ -179,7 +197,7 @@ if (structureListContainer) {
 
       const cb = document.createElement('input');
       cb.type = 'checkbox';
-      cb.checked = true;
+      cb.checked = viewer.isStructureVisible(item.id);
       cb.setAttribute('data-structure-id', item.id);
       cb.addEventListener('change', () => {
         viewer.toggleStructure(item.id, cb.checked);
@@ -217,6 +235,87 @@ if (structureListContainer) {
     structureListContainer.appendChild(groupSection);
   }
 }
+
+function updatePageUI(pageId, updateHistory = true) {
+  const pageConfig = SYSTEM_PAGES[pageId] || SYSTEM_PAGES.nervous;
+  currentPageId = pageConfig.meta.id;
+
+  // Update System Page Navigation Tabs
+  document.querySelectorAll('.system-page-tab').forEach(tab => {
+    const tabPage = tab.getAttribute('data-system-page');
+    const isActive = tabPage === currentPageId;
+    tab.classList.toggle('active', isActive);
+    tab.setAttribute('aria-current', isActive ? 'page' : 'false');
+  });
+
+  // Update Brand Main Title and Subtitle
+  if (brandMainTitle) {
+    brandMainTitle.textContent = currentLang === 'en' ? pageConfig.meta.titleEn : pageConfig.meta.titleZh;
+  }
+  if (brandSubTitle) {
+    brandSubTitle.textContent = currentLang === 'en' ? pageConfig.meta.subtitleEn : pageConfig.meta.subtitleZh;
+  }
+  document.title = currentLang === 'en'
+    ? `${pageConfig.meta.titleEn} | Interactive Anatomy Explorer`
+    : `${pageConfig.meta.titleZh}｜互動人體解剖探索`;
+
+  // Update Header Preset Button Labels dynamically
+  const isNervous = currentPageId === 'nervous';
+  const presetLabels = {
+    all: t('全部顯示'),
+    nervesOnly: isNervous ? t('僅神經系統') : t('僅器官系統'),
+    nervesAndSpine: isNervous ? t('神經＋脊椎') : t('器官＋脊椎'),
+    nervesAndSkeleton: isNervous ? t('神經＋全身骨骼') : t('器官＋全身骨骼'),
+  };
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    const presetKey = btn.getAttribute('data-preset');
+    if (presetLabels[presetKey]) {
+      btn.textContent = presetLabels[presetKey];
+    }
+    btn.classList.toggle('active', presetKey === 'all');
+  });
+
+  // Show Brain Hemispheres section only when on nervous page
+  if (brainModeSection) {
+    brainModeSection.hidden = !isNervous;
+  }
+
+  // Update back-view button label dynamically
+  const backViewBtn = document.querySelector('.view-btn[data-view="back"]');
+  if (backViewBtn) {
+    backViewBtn.textContent = isNervous ? t('背面 (脊髓與脊神經)') : t('背面 (脊椎與內臟)');
+  }
+
+  // Re-render structure hierarchy
+  renderStructureHierarchy(currentPageId);
+
+  // Sync top controls
+  if (ghostBonesCheckbox) ghostBonesCheckbox.checked = viewer.getGhostBones();
+  if (calloutPinsCheckbox) calloutPinsCheckbox.checked = viewer.getShowBrainPins();
+  if (brainPinsCheckbox) brainPinsCheckbox.checked = viewer.getShowBrainPins();
+  if (silhouetteCheckbox) silhouetteCheckbox.checked = true;
+  if (searchInput) searchInput.value = '';
+
+  // Update URL query ?page=<pageId>
+  if (updateHistory && typeof history.replaceState === 'function') {
+    const url = new URL(location.href);
+    url.searchParams.set('page', currentPageId);
+    history.replaceState({ page: currentPageId }, '', url.toString());
+  }
+}
+
+// Initial UI render
+updatePageUI(currentPageId, true);
+
+// Dedicated System Page Switcher Tabs
+document.querySelectorAll('.system-page-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const targetPage = tab.getAttribute('data-system-page');
+    if (!targetPage || targetPage === currentPageId) return;
+    viewer.setSystemPage(targetPage);
+    updatePageUI(targetPage, true);
+  });
+});
 
 // Search Filter
 if (searchInput) {
@@ -267,11 +366,22 @@ document.querySelectorAll('.hemi-btn').forEach(btn => {
   });
 });
 
-// 3D Functional Brain Area Pins Toggle
-const brainPinsCheckbox = document.getElementById('brain-pins-toggle');
+// 3D Callout Pins Toggles (both general and brain section checkboxes stay synced)
+function setPinsVisibility(visible) {
+  viewer.setShowBrainPins(visible);
+  if (calloutPinsCheckbox) calloutPinsCheckbox.checked = visible;
+  if (brainPinsCheckbox) brainPinsCheckbox.checked = visible;
+}
+
+if (calloutPinsCheckbox) {
+  calloutPinsCheckbox.addEventListener('change', () => {
+    setPinsVisibility(calloutPinsCheckbox.checked);
+  });
+}
+
 if (brainPinsCheckbox) {
   brainPinsCheckbox.addEventListener('change', () => {
-    viewer.setShowBrainPins(brainPinsCheckbox.checked);
+    setPinsVisibility(brainPinsCheckbox.checked);
   });
 }
 
@@ -288,9 +398,9 @@ document.querySelectorAll('.brain-mode-btn').forEach(btn => {
       const id = cb.getAttribute('data-structure-id');
       cb.checked = viewer.isStructureVisible(id);
     });
-    if (brainPinsCheckbox) {
-      brainPinsCheckbox.checked = viewer.getShowBrainPins();
-    }
+    const showPins = viewer.getShowBrainPins();
+    if (calloutPinsCheckbox) calloutPinsCheckbox.checked = showPins;
+    if (brainPinsCheckbox) brainPinsCheckbox.checked = showPins;
   });
 });
 

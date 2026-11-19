@@ -45,6 +45,15 @@
     </div>
   </header>
 
+  <nav class="system-pages-nav" aria-label="六大器官系統專頁切換">
+    <button type="button" class="system-page-tab active" data-system-page="nervous">神經系統＋骨骼</button>
+    <button type="button" class="system-page-tab" data-system-page="circulatory">1. 循環系統＋骨骼</button>
+    <button type="button" class="system-page-tab" data-system-page="respiratory">2. 呼吸系統＋骨骼＋呼吸肌</button>
+    <button type="button" class="system-page-tab" data-system-page="urinary">3. 泌尿系統＋骨骼</button>
+    <button type="button" class="system-page-tab" data-system-page="endocrine">4. 內分泌系統</button>
+    <button type="button" class="system-page-tab" data-system-page="digestive">5. 消化系統＋骨骼</button>
+  </nav>
+
   <main class="main-workspace">
     <!-- 3D Canvas Stage Container -->
     <div id="stage" class="viewer-stage" aria-label="神經系統 3D 畫面">
@@ -125,7 +134,13 @@
           <div class="setting-row separator-top">
             <label class="toggle-label">
               <input id="ghost-bones-toggle" type="checkbox" checked>
-              <span>半透明骨骼模式 (透視內部神經)</span>
+              <span>半透明骨骼模式 (透視內部構造)</span>
+            </label>
+          </div>
+          <div class="setting-row separator-top">
+            <label class="toggle-label">
+              <input id="callout-pins-toggle" type="checkbox" checked>
+              <span>顯示 3D 構造引線標示</span>
             </label>
           </div>
         </section>

@@ -53,7 +53,7 @@ describe('interface language', () => {
     const directory = new URL('../../src/', import.meta.url);
     // Name tables are data, shown in Chinese only when Chinese is asked for; this file is the dictionary itself.
     // regions.js and tracking-core.js have their own cases here: their texts are data and joined sentences.
-    const skipped = ['anatomy-names.js', 'nerve-names.js', 'label-names.js', 'i18n.js', 'regions.js', 'tracking-core.js', 'systems.js', 'neuro-data.js', 'neuro-viewer.js'];
+    const skipped = ['anatomy-names.js', 'nerve-names.js', 'label-names.js', 'i18n.js', 'regions.js', 'tracking-core.js', 'systems.js', 'neuro-data.js', 'neuro-viewer.js', 'circulatory.js', 'respiratory.js', 'digestive.js', 'urinary.js', 'endocrine.js'];
     const untranslated = [];
     for (const file of readdirSync(directory).filter((name) => name.endsWith('.js') && !skipped.includes(name))) {
       const code = readFileSync(new URL(file, directory), 'utf8').replace(/\/\/.*$/gm, '');

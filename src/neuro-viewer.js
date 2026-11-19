@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { decodeGeometry } from './geometry.js';
-import { STRUCTURES } from './neuro-data.js';
+import { CATEGORIES as NERVOUS_CATEGORIES, STRUCTURES as NERVOUS_STRUCTURES } from './neuro-data.js';
 import {
   makeCmMatrix,
   makeCmToViewerMatrix,
@@ -11,18 +11,96 @@ import {
   buildSpinalNerveRoots,
   buildHandBonesAndNerves,
 } from './neuro-builder.js';
+import {
+  CIRCULATORY_META,
+  CIRCULATORY_CATEGORIES,
+  CIRCULATORY_STRUCTURES,
+  buildCirculatorySystemGeometries,
+} from './systems/circulatory.js';
+import {
+  RESPIRATORY_META,
+  RESPIRATORY_CATEGORIES,
+  RESPIRATORY_STRUCTURES,
+  buildRespiratorySystemGeometries,
+} from './systems/respiratory.js';
+import {
+  URINARY_META,
+  URINARY_CATEGORIES,
+  URINARY_STRUCTURES,
+  buildUrinarySystemGeometries,
+} from './systems/urinary.js';
+import {
+  ENDOCRINE_META,
+  ENDOCRINE_CATEGORIES,
+  ENDOCRINE_STRUCTURES,
+  buildEndocrineSystemGeometries,
+} from './systems/endocrine.js';
+import {
+  DIGESTIVE_META,
+  DIGESTIVE_CATEGORIES,
+  DIGESTIVE_STRUCTURES,
+  buildDigestiveSystemGeometries,
+} from './systems/digestive.js';
 
-// Opaque, realistic medical textbook material for brain regions and spinal cord
-function createTextbookTissueMaterial(colorHex, { isCord = false, isOverlay = false } = {}) {
+export const NERVOUS_META = Object.freeze({
+  id: 'nervous',
+  titleZh: '神經系統 3D 專頁',
+  titleEn: '3D Nervous System',
+  subtitleZh: '中樞・腦神經・脊髓・周邊神經・骨骼系統',
+  subtitleEn: 'Central · Cranial · Spinal · Peripheral Nerves · Skeleton',
+});
+
+export const SYSTEM_PAGES = Object.freeze({
+  nervous: {
+    meta: NERVOUS_META,
+    categories: NERVOUS_CATEGORIES,
+    structures: NERVOUS_STRUCTURES,
+    defaultView: { yaw: 0.28, pitch: 0.06, dist: 1.52, pivot: [0, -0.02, 0] },
+  },
+  circulatory: {
+    meta: CIRCULATORY_META,
+    categories: CIRCULATORY_CATEGORIES,
+    structures: CIRCULATORY_STRUCTURES,
+    defaultView: { yaw: 0.24, pitch: 0.05, dist: 1.48, pivot: [0, 0.02, 0] },
+  },
+  respiratory: {
+    meta: RESPIRATORY_META,
+    categories: RESPIRATORY_CATEGORIES,
+    structures: RESPIRATORY_STRUCTURES,
+    defaultView: { yaw: 0.24, pitch: 0.05, dist: 1.25, pivot: [0, 0.14, 0] },
+  },
+  urinary: {
+    meta: URINARY_META,
+    categories: URINARY_CATEGORIES,
+    structures: URINARY_STRUCTURES,
+    defaultView: { yaw: 0.22, pitch: 0.04, dist: 1.18, pivot: [0, -0.04, 0] },
+  },
+  endocrine: {
+    meta: ENDOCRINE_META,
+    categories: ENDOCRINE_CATEGORIES,
+    structures: ENDOCRINE_STRUCTURES,
+    defaultView: { yaw: 0.24, pitch: 0.05, dist: 1.28, pivot: [0, 0.12, 0] },
+  },
+  digestive: {
+    meta: DIGESTIVE_META,
+    categories: DIGESTIVE_CATEGORIES,
+    structures: DIGESTIVE_STRUCTURES,
+    defaultView: { yaw: 0.22, pitch: 0.05, dist: 1.26, pivot: [0, 0.04, 0] },
+  },
+});
+
+// Opaque or translucent medical textbook material for brain regions, spinal cord, and visceral organs
+function createTextbookTissueMaterial(colorHex, { isCord = false, isOverlay = false, opacity = 1.0, transparent = false, depthWrite = true } = {}) {
+  const isTranslucent = transparent || opacity < 0.99;
   return new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(colorHex),
-    roughness: isCord ? 0.42 : 0.48,
-    metalness: 0.02,
-    clearcoat: 0.16,
-    clearcoatRoughness: 0.38,
-    transparent: false,
-    opacity: 1.0,
-    depthWrite: true,
+    roughness: isCord ? 0.42 : 0.46,
+    metalness: 0.03,
+    clearcoat: isTranslucent ? 0.06 : 0.18,
+    clearcoatRoughness: 0.36,
+    transparent: isTranslucent,
+    opacity,
+    depthWrite: isTranslucent ? false : depthWrite,
     depthTest: true,
     polygonOffset: isOverlay,
     polygonOffsetFactor: isOverlay ? -1.5 : 0,
@@ -31,7 +109,7 @@ function createTextbookTissueMaterial(colorHex, { isCord = false, isOverlay = fa
   });
 }
 
-// Opaque, crisp medical textbook yellow material for cranial and spinal peripheral nerves
+// Opaque, crisp medical textbook material for cranial/spinal nerves and major vascular/endocrine conduits
 function createTextbookNerveMaterial(colorHex) {
   const c = new THREE.Color(colorHex);
   return new THREE.MeshStandardMaterial({
@@ -123,7 +201,7 @@ function createSilhouetteMaterial() {
   });
 }
 
-export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onSelect }) {
+export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = 'nervous', onProgress, onSelect }) {
   let width = container.clientWidth || window.innerWidth;
   let height = container.clientHeight || window.innerHeight;
 
@@ -144,7 +222,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
   renderer.toneMappingExposure = 1.12;
   container.appendChild(renderer.domElement);
 
-  // Overlay layer for 3D Functional Brain Area Pin Labels + SVG Callout Lines
+  // Overlay layer for 3D Pin Labels + SVG Callout Lines
   const pinsLayer = document.createElement('div');
   pinsLayer.className = 'brain-pins-layer';
   const pinsSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -172,17 +250,26 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
   const root = new THREE.Group();
   scene.add(root);
 
+  // Active system page state
+  let currentPageId = SYSTEM_PAGES[initialPage] ? initialPage : 'nervous';
+  let activeStructures = SYSTEM_PAGES[currentPageId].structures;
+  let activeCategories = SYSTEM_PAGES[currentPageId].categories;
+
   // Meshes & structures registries
   const meshesByName = new Map();
   const meshesByStructureId = new Map();
   const structureStates = new Map();
   const pinElements = [];
 
+  // Shared decoded geometry bundles & caches
+  let rawAssets = null;
+  let sharedSkeletonGeos = null;
+  const systemGeosCache = new Map();
+
   let ghostBones = true;
   let silhouetteOpacity = 0.22;
   let silhouetteMaterial = null;
   let brainHemisphere = 'both'; // 'both' | 'L' | 'R'
-  let functionalColors = true;
   let showBrainPins = true;
 
   // Orbit & Pan & Zoom interaction state
@@ -209,50 +296,6 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
   const mouse = new THREE.Vector2();
   let selectedStructureId = null;
   let highlightGroup = null;
-
-  // Initialize visibility state for all structures
-  for (const item of STRUCTURES) {
-    structureStates.set(item.id, true);
-    meshesByStructureId.set(item.id, []);
-  }
-
-  // Create 3D Pin DOM elements & SVG leader lines for functional brain areas
-  for (const item of STRUCTURES) {
-    if (!item.anchorL || !item.pinZh) continue;
-
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('class', 'pin-leader-line');
-    line.setAttribute('stroke', item.color);
-    pinsSvg.appendChild(line);
-
-    const anchorCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    anchorCircle.setAttribute('class', 'pin-anchor-dot');
-    anchorCircle.setAttribute('r', '3.5');
-    anchorCircle.setAttribute('fill', item.color);
-    pinsSvg.appendChild(anchorCircle);
-
-    const pinBtn = document.createElement('button');
-    pinBtn.type = 'button';
-    pinBtn.className = 'brain-pin';
-    pinBtn.setAttribute('data-pin-id', item.id);
-
-    const dot = document.createElement('span');
-    dot.className = 'pin-dot';
-    dot.style.backgroundColor = item.color;
-
-    const text = document.createElement('span');
-    text.className = 'pin-text';
-    text.textContent = lang === 'en' ? item.pinEn : item.pinZh;
-
-    pinBtn.appendChild(dot);
-    pinBtn.appendChild(text);
-    pinBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      selectStructure(item.id);
-    });
-    pinsLayer.appendChild(pinBtn);
-    pinElements.push({ item, el: pinBtn, dot, line, anchorCircle, vec: new THREE.Vector3() });
-  }
 
   // Camera views preset definitions
   const VIEW_PRESETS = {
@@ -281,12 +324,307 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     for (const m of meshes) {
       const mName = m.userData?.meshName || '';
       let hemiAllowed = true;
-      if (isBrainCategory(m.userData?.category) && brainHemisphere !== 'both') {
+      if (currentPageId === 'nervous' && isBrainCategory(m.userData?.category) && brainHemisphere !== 'both') {
         if (mName.endsWith('_L') && brainHemisphere !== 'L') hemiAllowed = false;
         if (mName.endsWith('_R') && brainHemisphere !== 'R') hemiAllowed = false;
       }
       m.visible = enabled && hemiAllowed;
     }
+  }
+
+  function rebuildPinsForStructures(structures) {
+    // Clear existing pin buttons & SVG lines
+    for (const p of pinElements) {
+      p.el.remove();
+      p.line.remove();
+      p.anchorCircle.remove();
+    }
+    pinElements.length = 0;
+
+    for (let idx = 0; idx < structures.length; idx++) {
+      const item = structures[idx];
+      if (!item.anchorL || !item.pinZh) continue;
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('class', 'pin-leader-line');
+      line.setAttribute('stroke', item.color);
+      pinsSvg.appendChild(line);
+
+      const anchorCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      anchorCircle.setAttribute('class', 'pin-anchor-dot');
+      anchorCircle.setAttribute('r', '3.5');
+      anchorCircle.setAttribute('fill', item.color);
+      pinsSvg.appendChild(anchorCircle);
+
+      const pinBtn = document.createElement('button');
+      pinBtn.type = 'button';
+      pinBtn.className = 'brain-pin';
+      pinBtn.setAttribute('data-pin-id', item.id);
+
+      const dot = document.createElement('span');
+      dot.className = 'pin-dot';
+      dot.style.backgroundColor = item.color;
+
+      const text = document.createElement('span');
+      text.className = 'pin-text';
+      text.textContent = lang === 'en' ? item.pinEn : item.pinZh;
+
+      pinBtn.appendChild(dot);
+      pinBtn.appendChild(text);
+      pinBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        selectStructure(item.id);
+      });
+      pinsLayer.appendChild(pinBtn);
+      pinElements.push({ item, idx, el: pinBtn, dot, line, anchorCircle, vec: new THREE.Vector3() });
+    }
+  }
+
+  function getOrBuildSystemGeometries(pageId) {
+    if (systemGeosCache.has(pageId)) {
+      return systemGeosCache.get(pageId);
+    }
+    if (!rawAssets) return {};
+
+    const {
+      headMeta, headGeos,
+      nervesMeta, nervesGeos,
+      periMeta, periGeos,
+      bodyMeta, bodyGeos,
+      musclesMeta, musclesGeos,
+      cmToViewer, headCmMatrix,
+    } = rawAssets;
+
+    let built = {};
+    if (pageId === 'nervous') {
+      const brainRegionGeos = buildBrainRegions(headGeos, headCmMatrix, cmToViewer);
+      const headHindbrainCm = headGeos.hindbrain.clone().applyMatrix4(headCmMatrix);
+      const cordCervSf = nervesMeta.meshes.find(m => m.name === 'cord_cervical').sourceFrame;
+      const cordCervCm = alignCervicalCordToMedulla(nervesGeos.cord_cervical, cordCervSf, headHindbrainCm);
+      const cordThorCm = nervesGeos.cord_thoracic.clone().applyMatrix4(
+        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_thoracic').sourceFrame)
+      );
+      const cordLumbCm = nervesGeos.cord_lumbar.clone().applyMatrix4(
+        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_lumbar').sourceFrame)
+      );
+      const cordSacrCm = nervesGeos.cord_sacral.clone().applyMatrix4(
+        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_sacral').sourceFrame)
+      );
+
+      const alignedCordGeos = {
+        cord_cervical: cordCervCm.clone().applyMatrix4(cmToViewer),
+        cord_thoracic: cordThorCm.clone().applyMatrix4(cmToViewer),
+        cord_lumbar: cordLumbCm.clone().applyMatrix4(cmToViewer),
+        cord_sacral: cordSacrCm.clone().applyMatrix4(cmToViewer),
+      };
+      for (const g of Object.values(alignedCordGeos)) {
+        g.computeVertexNormals();
+        g.computeBoundingBox();
+        g.computeBoundingSphere();
+      }
+
+      const cranialNerveGeos = buildCranialNerves(periMeta, periGeos, headCmMatrix, cmToViewer);
+      const spinalRootGeos = buildSpinalNerveRoots(
+        [cordCervCm, cordThorCm, cordLumbCm, cordSacrCm],
+        periMeta,
+        periGeos,
+        cmToViewer
+      );
+
+      built = {
+        ...brainRegionGeos,
+        ...alignedCordGeos,
+        ...cranialNerveGeos,
+        ...spinalRootGeos,
+      };
+    } else if (pageId === 'circulatory') {
+      built = buildCirculatorySystemGeometries({ bodyMeta, bodyGeos, headGeos, headCmMatrix, cmToViewer });
+    } else if (pageId === 'respiratory') {
+      built = buildRespiratorySystemGeometries({ bodyMeta, bodyGeos, musclesMeta, musclesGeos, headGeos, headCmMatrix, cmToViewer });
+    } else if (pageId === 'urinary') {
+      built = buildUrinarySystemGeometries({ bodyMeta, bodyGeos, cmToViewer });
+    } else if (pageId === 'endocrine') {
+      built = buildEndocrineSystemGeometries({ headMeta, headGeos, headCmMatrix, bodyMeta, bodyGeos, cmToViewer });
+    } else if (pageId === 'digestive') {
+      built = buildDigestiveSystemGeometries({ bodyMeta, bodyGeos, headGeos, headCmMatrix, cmToViewer });
+    }
+
+    systemGeosCache.set(pageId, built || {});
+    return built || {};
+  }
+
+  function createMaterialForStructure(item) {
+    if (isBoneCategory(item.category)) {
+      return createBoneMaterial(item.color, { ghost: ghostBones });
+    }
+    if (item.category === 'silhouette') {
+      return silhouetteMaterial;
+    }
+    const opacity = typeof item.opacity === 'number' ? item.opacity : 1.0;
+    const transparent = Boolean(item.transparent) || opacity < 0.99;
+    const depthWrite = typeof item.depthWrite === 'boolean' ? item.depthWrite : !transparent;
+    if (item.category === 'brainFunctional') {
+      return createTextbookTissueMaterial(item.color, { isCord: false, isOverlay: true, opacity, transparent, depthWrite });
+    }
+    if (item.category === 'cranialNerves' || item.category === 'peripheralNerves') {
+      return createTextbookNerveMaterial(item.color);
+    }
+    if (item.category === 'spinalCord') {
+      return createTextbookTissueMaterial(item.color, { isCord: true, opacity, transparent, depthWrite });
+    }
+    return createTextbookTissueMaterial(item.color, { isCord: false, isOverlay: false, opacity, transparent, depthWrite });
+  }
+
+  function clearRootScene() {
+    clearHighlight();
+    for (let i = root.children.length - 1; i >= 0; i--) {
+      const child = root.children[i];
+      root.remove(child);
+      if (child.material && child.material !== silhouetteMaterial) {
+        child.material.dispose();
+      }
+    }
+    meshesByName.clear();
+    meshesByStructureId.clear();
+    structureStates.clear();
+  }
+
+  function populateSystemScene(pageId) {
+    const pageDef = SYSTEM_PAGES[pageId] || SYSTEM_PAGES.nervous;
+    currentPageId = pageId;
+    activeStructures = pageDef.structures;
+    activeCategories = pageDef.categories;
+
+    clearRootScene();
+
+    for (const item of activeStructures) {
+      structureStates.set(item.id, true);
+      meshesByStructureId.set(item.id, []);
+    }
+
+    rebuildPinsForStructures(activeStructures);
+
+    if (!rawAssets) return;
+
+    const {
+      headGeos,
+      nervesMeta, nervesGeos,
+      periMeta, periGeos,
+      bodyMeta, bodyGeos,
+      musclesMeta, musclesGeos,
+      cmToViewer, fullHeadMatrix,
+    } = rawAssets;
+
+    const systemCustomGeos = getOrBuildSystemGeometries(pageId);
+    const customViewerGeos = {
+      ...sharedSkeletonGeos,
+      ...systemCustomGeos,
+    };
+
+    function addStructureMesh(item, meshName, geo, transformMatrix = null) {
+      if (!geo) return;
+      const finalGeo = transformMatrix ? geo.clone().applyMatrix4(transformMatrix) : geo;
+      if (!finalGeo.attributes.normal) {
+        finalGeo.computeVertexNormals();
+      }
+      if (!finalGeo.boundingBox) {
+        finalGeo.computeBoundingBox();
+      }
+      if (!finalGeo.boundingSphere) {
+        finalGeo.computeBoundingSphere();
+      }
+
+      const mat = createMaterialForStructure(item);
+      const mesh = new THREE.Mesh(finalGeo, mat);
+      const isTranslucentOrgan = !isBoneCategory(item.category) && item.category !== 'silhouette' && (mat.transparent || mat.opacity < 0.99);
+      mesh.renderOrder =
+        item.category === 'silhouette'
+          ? 4
+          : isBoneCategory(item.category)
+            ? 3
+            : isTranslucentOrgan
+              ? 2
+              : 1;
+      mesh.userData = {
+        structureId: item.id,
+        category: item.category,
+        nameZh: item.nameZh,
+        nameEn: item.nameEn,
+        meshName,
+      };
+
+      root.add(mesh);
+      meshesByName.set(meshName, mesh);
+      const list = meshesByStructureId.get(item.id);
+      if (list) list.push(mesh);
+    }
+
+    for (const item of activeStructures) {
+      for (const mName of item.meshes) {
+        if (customViewerGeos[mName]) {
+          addStructureMesh(item, mName, customViewerGeos[mName], null);
+        } else if (item.bundle === 'head' || headGeos[mName]) {
+          addStructureMesh(item, mName, headGeos[mName], fullHeadMatrix);
+        } else if (item.bundle === 'nerves' || nervesGeos[mName]) {
+          const entry = nervesMeta.meshes.find(m => m.name === mName);
+          if (entry && nervesGeos[mName]) {
+            const mat = entry.frame === 'head'
+              ? fullHeadMatrix
+              : cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, nervesGeos[mName], mat);
+          }
+        } else if (item.bundle === 'peripheral' || periGeos[mName]) {
+          const entry = periMeta.meshes.find(m => m.name === mName);
+          if (entry && periGeos[mName]) {
+            const mat = entry.frame === 'head'
+              ? fullHeadMatrix
+              : cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, periGeos[mName], mat);
+          }
+        } else if (item.bundle === 'body' || bodyGeos[mName]) {
+          const entry = bodyMeta.meshes.find(m => m.name === mName);
+          if (entry && bodyGeos[mName]) {
+            const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, bodyGeos[mName], mat);
+          }
+        } else if (item.bundle === 'muscles' || musclesGeos[mName]) {
+          const entry = musclesMeta.meshes.find(m => m.name === mName);
+          if (entry && musclesGeos[mName]) {
+            const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, musclesGeos[mName], mat);
+          }
+        }
+      }
+    }
+
+    // Add full-body muscle envelope into the silhouette group
+    const silhouetteItem = activeStructures.find(s => s.id === 'silhouetteMesh' || s.category === 'silhouette');
+    if (silhouetteItem) {
+      const bodySilhouetteMuscles = [
+        'muscle_neck_L', 'muscle_neck_R',
+        'muscle_chest_L', 'muscle_chest_R',
+        'muscle_back_L', 'muscle_back_R',
+        'muscle_abdomen_L', 'muscle_abdomen_R',
+        'muscle_thigh_L', 'muscle_thigh_R',
+        'muscle_shin_L', 'muscle_shin_R',
+      ];
+
+      for (const mName of bodySilhouetteMuscles) {
+        const geo = musclesGeos[mName];
+        const entry = musclesMeta.meshes.find(m => m.name === mName);
+        if (geo && entry?.sourceFrame) {
+          const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+          addStructureMesh(silhouetteItem, `silhouette_${mName}`, geo, mat);
+        }
+      }
+    }
+
+    // Apply default camera view for this system page
+    const defView = pageDef.defaultView || VIEW_PRESETS.default;
+    targetYaw = defView.yaw;
+    targetPitch = defView.pitch;
+    targetDistance = defView.dist;
+    targetPivot.set(defView.pivot[0], defView.pivot[1], defView.pivot[2]);
   }
 
   // Asynchronous Asset Loading & Normalization
@@ -333,156 +671,28 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
 
       onProgress?.({ percent: 70, text: '建立中樞與周邊神經系統...' });
 
-      // 1. Build split brain functional areas × L/R hemispheres + cerebellum L/R + pons + medulla
-      const brainRegionGeos = buildBrainRegions(headGeos, headCmMatrix, cmToViewer);
-
-      // 2. Split torso_skel into separate Thoracic Spine, Lumbar Spine, Sacrum, Ribcage/Sternum, Shoulder Girdle, and Pelvis
+      // Build shared skeleton parts (torso parts & hand bones/nerves) once
       const torsoEntry = bodyMeta.meshes.find(m => m.name === 'torso_skel');
       const torsoPartsGeos = buildTorsoSkeletonParts(bodyGeos.torso_skel, torsoEntry.sourceFrame, cmToViewer);
-
-      // 3. Align upper cervical spinal cord (cord_cervical) coaxially with the medulla oblongata
-      const headHindbrainCm = headGeos.hindbrain.clone().applyMatrix4(headCmMatrix);
-      const cordCervSf = nervesMeta.meshes.find(m => m.name === 'cord_cervical').sourceFrame;
-      const cordCervCm = alignCervicalCordToMedulla(nervesGeos.cord_cervical, cordCervSf, headHindbrainCm);
-      const cordThorCm = nervesGeos.cord_thoracic.clone().applyMatrix4(
-        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_thoracic').sourceFrame)
-      );
-      const cordLumbCm = nervesGeos.cord_lumbar.clone().applyMatrix4(
-        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_lumbar').sourceFrame)
-      );
-      const cordSacrCm = nervesGeos.cord_sacral.clone().applyMatrix4(
-        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_sacral').sourceFrame)
-      );
-
-      const alignedCordGeos = {
-        cord_cervical: cordCervCm.clone().applyMatrix4(cmToViewer),
-        cord_thoracic: cordThorCm.clone().applyMatrix4(cmToViewer),
-        cord_lumbar: cordLumbCm.clone().applyMatrix4(cmToViewer),
-        cord_sacral: cordSacrCm.clone().applyMatrix4(cmToViewer),
-      };
-      for (const g of Object.values(alignedCordGeos)) {
-        g.computeVertexNormals();
-        g.computeBoundingBox();
-        g.computeBoundingSphere();
-      }
-
-      // 4. Build all 12 pairs of Cranial Nerves (CN I – CN XII)
-      const cranialNerveGeos = buildCranialNerves(periMeta, periGeos, headCmMatrix, cmToViewer);
-
-      // 5. Build Spinal Nerve Roots & Cauda Equina connecting the spinal cord to all spinal nerves
-      const spinalRootGeos = buildSpinalNerveRoots(
-        [cordCervCm, cordThorCm, cordLumbCm, cordSacrCm],
-        periMeta,
-        periGeos,
-        cmToViewer
-      );
-
-      // 6. Build Left and Right Hand Bones and Hand Peripheral Nerves
       const handGeos = buildHandBonesAndNerves(headGeos, periMeta, periGeos, cmToViewer);
 
-      const customViewerGeos = {
-        ...brainRegionGeos,
+      sharedSkeletonGeos = {
         ...torsoPartsGeos,
-        ...cranialNerveGeos,
-        ...spinalRootGeos,
         ...handGeos,
       };
 
-      function createMaterialForStructure(item) {
-        if (isBoneCategory(item.category)) {
-          return createBoneMaterial(item.color, { ghost: ghostBones });
-        }
-        if (item.category === 'silhouette') {
-          return silhouetteMaterial;
-        }
-        if (item.category === 'brainFunctional') {
-          return createTextbookTissueMaterial(item.color, { isCord: false, isOverlay: true });
-        }
-        if (item.category === 'brain') {
-          return createTextbookTissueMaterial(item.color, { isCord: false, isOverlay: false });
-        }
-        if (item.category === 'spinalCord') {
-          return createTextbookTissueMaterial(item.color, { isCord: true });
-        }
-        return createTextbookNerveMaterial(item.color);
-      }
+      rawAssets = {
+        headMeta, headGeos,
+        nervesMeta, nervesGeos,
+        periMeta, periGeos,
+        bodyMeta, bodyGeos,
+        musclesMeta, musclesGeos,
+        cmToViewer,
+        headCmMatrix,
+        fullHeadMatrix,
+      };
 
-      function addStructureMesh(item, meshName, geo, transformMatrix = null) {
-        if (!geo) return;
-        const finalGeo = transformMatrix ? geo.clone().applyMatrix4(transformMatrix) : geo;
-        finalGeo.computeVertexNormals();
-        finalGeo.computeBoundingBox();
-        finalGeo.computeBoundingSphere();
-
-        const mat = createMaterialForStructure(item);
-        const mesh = new THREE.Mesh(finalGeo, mat);
-        mesh.renderOrder =
-          item.category === 'silhouette'
-            ? 3
-            : isBoneCategory(item.category)
-              ? 2
-              : 1;
-        mesh.userData = {
-          structureId: item.id,
-          category: item.category,
-          nameZh: item.nameZh,
-          nameEn: item.nameEn,
-          meshName,
-        };
-
-        root.add(mesh);
-        meshesByName.set(meshName, mesh);
-        meshesByStructureId.get(item.id).push(mesh);
-      }
-
-      // Instantiate all structures from STRUCTURES
-      for (const item of STRUCTURES) {
-        for (const mName of item.meshes) {
-          if (customViewerGeos[mName]) {
-            addStructureMesh(item, mName, customViewerGeos[mName], null);
-          } else if (alignedCordGeos[mName]) {
-            addStructureMesh(item, mName, alignedCordGeos[mName], null);
-          } else if (item.bundle === 'head') {
-            addStructureMesh(item, mName, headGeos[mName], fullHeadMatrix);
-          } else if (item.bundle === 'nerves') {
-            const entry = nervesMeta.meshes.find(m => m.name === mName);
-            const mat = entry?.frame === 'head'
-              ? fullHeadMatrix
-              : cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
-            addStructureMesh(item, mName, nervesGeos[mName], mat);
-          } else if (item.bundle === 'peripheral') {
-            const entry = periMeta.meshes.find(m => m.name === mName);
-            const mat = entry?.frame === 'head'
-              ? fullHeadMatrix
-              : cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
-            addStructureMesh(item, mName, periGeos[mName], mat);
-          } else if (item.bundle === 'body') {
-            const entry = bodyMeta.meshes.find(m => m.name === mName);
-            const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
-            addStructureMesh(item, mName, bodyGeos[mName], mat);
-          }
-        }
-      }
-
-      // Add full-body muscle envelope into the silhouette group
-      const silhouetteItem = STRUCTURES.find(s => s.id === 'silhouetteMesh');
-      const bodySilhouetteMuscles = [
-        'muscle_neck_L', 'muscle_neck_R',
-        'muscle_chest_L', 'muscle_chest_R',
-        'muscle_back_L', 'muscle_back_R',
-        'muscle_abdomen_L', 'muscle_abdomen_R',
-        'muscle_thigh_L', 'muscle_thigh_R',
-        'muscle_shin_L', 'muscle_shin_R',
-      ];
-
-      for (const mName of bodySilhouetteMuscles) {
-        const geo = musclesGeos[mName];
-        const entry = musclesMeta.meshes.find(m => m.name === mName);
-        if (geo && entry?.sourceFrame) {
-          const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
-          addStructureMesh(silhouetteItem, mName, geo, mat);
-        }
-      }
+      populateSystemScene(currentPageId);
 
       onProgress?.({ percent: 100, text: '準備完成' });
     } catch (err) {
@@ -491,7 +701,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     }
   }
 
-  const brainCenterVec = new THREE.Vector3();
+  const refCenterVec = new THREE.Vector3();
   const LEFT_COL_IDS = new Set(['funcMotor', 'funcPremotor', 'funcPrefrontal', 'funcBroca', 'funcTemporalLimbic']);
 
   function updateCamera() {
@@ -516,16 +726,35 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     camera.lookAt(pivot);
   }
 
-  // Update 3D projected positions of functional brain area pins with non-overlapping callout columns
+  // Update 3D projected positions of callout pins with non-overlapping left/right columns
   function updatePins() {
-    brainCenterVec.set(0, 0.42, -0.01).project(camera);
-    const bcx = (brainCenterVec.x * 0.5 + 0.5) * width;
-    const radiusPx = Math.max(72, Math.min(185, 64 / Math.max(0.25, distance)));
+    // Calculate average Y of visible pins (or 0.42 for brain/nervous)
+    let centerY = 0.42;
+    if (currentPageId !== 'nervous') {
+      let sumY = 0;
+      let countY = 0;
+      for (const p of pinElements) {
+        if (showBrainPins && structureStates.get(p.item.id) !== false && p.item.anchorL) {
+          sumY += p.item.anchorL[1];
+          countY++;
+        }
+      }
+      if (countY > 0) {
+        centerY = sumY / countY;
+      } else {
+        centerY = 0.08;
+      }
+    }
+
+    refCenterVec.set(0, centerY, -0.01).project(camera);
+    const bcx = (refCenterVec.x * 0.5 + 0.5) * width;
+    const radiusPx = Math.max(72, Math.min(200, (currentPageId === 'nervous' ? 64 : 115) / Math.max(0.25, distance)));
 
     const leftCol = [];
     const rightCol = [];
 
-    for (const p of pinElements) {
+    for (let i = 0; i < pinElements.length; i++) {
+      const p = pinElements[i];
       const visible = showBrainPins && structureStates.get(p.item.id) !== false;
       if (!visible) {
         p.el.hidden = true;
@@ -534,7 +763,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
         continue;
       }
       const [ax, ay, az] = p.item.anchorL;
-      const signX = brainHemisphere === 'R' ? -1 : 1;
+      const signX = (currentPageId === 'nervous' && brainHemisphere === 'R') ? -1 : 1;
       p.vec.set(ax * signX, ay, az);
       p.vec.project(camera);
 
@@ -549,10 +778,20 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
       p.sy = (-p.vec.y * 0.5 + 0.5) * height;
       p.ly = p.sy;
 
-      if (LEFT_COL_IDS.has(p.item.id)) {
-        leftCol.push(p);
+      if (currentPageId === 'nervous') {
+        if (LEFT_COL_IDS.has(p.item.id)) {
+          leftCol.push(p);
+        } else {
+          rightCol.push(p);
+        }
       } else {
-        rightCol.push(p);
+        // Balance left & right callout columns across organ systems
+        const isLeft = Math.abs(ax) > 0.015 ? ax < 0 : (i % 2 === 0);
+        if (isLeft) {
+          leftCol.push(p);
+        } else {
+          rightCol.push(p);
+        }
       }
     }
 
@@ -753,7 +992,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
       return;
     }
 
-    const structure = STRUCTURES.find(s => s.id === structId);
+    const structure = activeStructures.find(s => s.id === structId);
     const meshes = (meshesByStructureId.get(structId) || []).filter(m => m.visible);
 
     if (structure && meshes.length > 0) {
@@ -814,6 +1053,21 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
   void loadAnatomy();
 
   return {
+    setSystemPage(pageId) {
+      if (!SYSTEM_PAGES[pageId]) return null;
+      selectStructure(null);
+      populateSystemScene(pageId);
+      return SYSTEM_PAGES[pageId];
+    },
+
+    getSystemPage() {
+      return currentPageId;
+    },
+
+    getActiveSystemConfig() {
+      return SYSTEM_PAGES[currentPageId];
+    },
+
     toggleStructure(id, visible) {
       structureStates.set(id, visible);
       syncMeshVisibility(id);
@@ -821,7 +1075,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     },
 
     toggleCategory(catId, visible) {
-      for (const item of STRUCTURES) {
+      for (const item of activeStructures) {
         if (item.category === catId) {
           this.toggleStructure(item.id, visible);
         }
@@ -835,7 +1089,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     // Brain Hemisphere filter: 'both' | 'L' | 'R'
     setBrainHemisphere(mode) {
       brainHemisphere = ['both', 'L', 'R'].includes(mode) ? mode : 'both';
-      for (const item of STRUCTURES) {
+      for (const item of activeStructures) {
         if (isBrainCategory(item.category)) {
           syncMeshVisibility(item.id);
         }
@@ -853,13 +1107,13 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
     setBrainPartitionMode(mode) {
       const baseLobes = ['frontalLobe', 'parietalLobe', 'temporalLobe', 'occipitalLobe'];
       if (mode === 'anatomical') {
-        for (const item of STRUCTURES) {
+        for (const item of activeStructures) {
           if (item.category === 'brain') this.toggleStructure(item.id, true);
           if (item.category === 'brainFunctional') this.toggleStructure(item.id, false);
         }
         this.setShowBrainPins(false);
       } else if (mode === 'functional') {
-        for (const item of STRUCTURES) {
+        for (const item of activeStructures) {
           if (item.category === 'brain') {
             this.toggleStructure(item.id, !baseLobes.includes(item.id));
           }
@@ -869,14 +1123,14 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
         }
         this.setShowBrainPins(true);
       } else {
-        for (const item of STRUCTURES) {
+        for (const item of activeStructures) {
           if (isBrainCategory(item.category)) this.toggleStructure(item.id, true);
         }
         this.setShowBrainPins(true);
       }
     },
 
-    // Toggle 3D Floating Functional Brain Area Pins
+    // Toggle 3D Floating Callout Pins
     setShowBrainPins(visible) {
       showBrainPins = !!visible;
     },
@@ -887,7 +1141,7 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
 
     setGhostBones(ghost) {
       ghostBones = !!ghost;
-      for (const item of STRUCTURES) {
+      for (const item of activeStructures) {
         if (isBoneCategory(item.category)) {
           const meshes = meshesByStructureId.get(item.id) || [];
           for (const m of meshes) {
@@ -917,30 +1171,34 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', onProgress, onS
 
     applyPreset(name) {
       if (name === 'all') {
-        for (const item of STRUCTURES) this.toggleStructure(item.id, true);
+        for (const item of activeStructures) this.toggleStructure(item.id, true);
         this.setGhostBones(true);
-      } else if (name === 'nervesOnly') {
-        for (const item of STRUCTURES) {
-          const isNerve = ['brain', 'brainFunctional', 'cranialNerves', 'spinalCord', 'peripheralNerves'].includes(item.category);
-          this.toggleStructure(item.id, isNerve);
+      } else if (name === 'nervesOnly' || name === 'systemOnly') {
+        for (const item of activeStructures) {
+          const isOrgan = !isBoneCategory(item.category) && item.category !== 'silhouette';
+          this.toggleStructure(item.id, isOrgan);
         }
-        this.toggleStructure('silhouetteMesh', true);
-      } else if (name === 'nervesAndSpine') {
-        // Shows Nervous System + isolated Vertebral Column (Cervical, Thoracic, Lumbar, Sacrum) without ribs/pelvis/limbs!
-        for (const item of STRUCTURES) {
-          const keep = ['brain', 'brainFunctional', 'cranialNerves', 'spinalCord', 'peripheralNerves', 'spine'].includes(item.category);
-          this.toggleStructure(item.id, keep);
+        const sil = activeStructures.find(s => s.category === 'silhouette');
+        if (sil) this.toggleStructure(sil.id, true);
+      } else if (name === 'nervesAndSpine' || name === 'systemAndSpine') {
+        for (const item of activeStructures) {
+          const isOrganOrSpine = (!isBoneCategory(item.category) && item.category !== 'silhouette') || item.category === 'spine';
+          this.toggleStructure(item.id, isOrganOrSpine);
         }
-        this.toggleStructure('silhouetteMesh', true);
+        const sil = activeStructures.find(s => s.category === 'silhouette');
+        if (sil) this.toggleStructure(sil.id, true);
         this.setGhostBones(false);
-      } else if (name === 'nervesAndSkeleton') {
-        for (const item of STRUCTURES) this.toggleStructure(item.id, true);
+      } else if (name === 'nervesAndSkeleton' || name === 'systemAndSkeleton') {
+        for (const item of activeStructures) this.toggleStructure(item.id, true);
         this.setGhostBones(false);
       }
     },
 
     setView(viewKey) {
-      const p = VIEW_PRESETS[viewKey] || VIEW_PRESETS.default;
+      const pageDef = SYSTEM_PAGES[currentPageId];
+      const p = (viewKey === 'default' && pageDef?.defaultView)
+        ? pageDef.defaultView
+        : (VIEW_PRESETS[viewKey] || VIEW_PRESETS.default);
       targetYaw = p.yaw;
       targetPitch = p.pitch;
       targetDistance = p.dist;

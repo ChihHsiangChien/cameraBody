@@ -15,6 +15,7 @@ const EN = Object.freeze({
   '骨骼顯示模式': 'Skeleton Display Mode',
   '半透明骨骼模式': 'Ghost bones mode',
   '半透明骨骼模式 (透視內部神經)': 'Ghost bones mode (translucent skeleton)',
+  '半透明骨骼模式 (透視內部構造)': 'Ghost bones mode (translucent skeleton)',
   '旋轉模式 (環視)': 'Orbit mode (rotate)',
   '平移模式 (移動)': 'Pan mode (move)',
   '模式：平移（拖曳移動視角）': 'Mode: Pan (Drag to move)',
@@ -22,6 +23,7 @@ const EN = Object.freeze({
   '正面': 'Front',
   '背面': 'Back',
   '背面 (脊髓與脊神經)': 'Back (Spine & Cord)',
+  '背面 (脊椎與內臟)': 'Back (Spine & Organs)',
   '側面': 'Side',
   '頂部': 'Top',
   '聚焦頭部': 'Focus Head',
@@ -37,6 +39,30 @@ const EN = Object.freeze({
   '僅神經系統': 'Nerves Only',
   '神經＋脊椎': 'Nerves & Spine',
   '神經＋全身骨骼': 'Nerves & Skeleton',
+  '僅器官系統': 'Organs Only',
+  '器官＋脊椎': 'Organs & Spine',
+  '器官＋全身骨骼': 'Organs & Skeleton',
+  '六大器官系統專頁切換': 'Organ System Dedicated Pages',
+  '神經系統＋骨骼': 'Nervous System + Skeleton',
+  '1. 循環系統＋骨骼': '1. Circulatory + Skeleton',
+  '2. 呼吸系統＋骨骼＋呼吸肌': '2. Respiratory + Skeleton + Muscles',
+  '3. 泌尿系統＋骨骼': '3. Urinary + Skeleton',
+  '4. 內分泌系統': '4. Endocrine System',
+  '5. 消化系統＋骨骼': '5. Digestive + Skeleton',
+  '循環系統 3D 專頁': '3D Circulatory System',
+  '心臟・動脈・靜脈・微血管網・骨骼系統': 'Heart · Arteries · Veins · Skeleton',
+  '呼吸系統 3D 專頁': '3D Respiratory System',
+  '上下呼吸道・左右肺葉・橫膈與呼吸肌群・胸廓骨骼': 'Airways · Lungs · Diaphragm & Respiratory Muscles · Skeleton',
+  '泌尿系統 3D 專頁': '3D Urinary System',
+  '左右腎臟・腎皮質與腎盂・輸尿管・膀胱・尿道・腎動靜脈・骨骼系統': 'Kidneys · Renal Pelvis · Ureters · Bladder · Urethra · Renal Vessels · Skeleton',
+  '左右腎臟・腎盂輸尿管・膀胱・尿道・腎血管・骨骼系統': 'Kidneys · Ureters · Urinary Bladder · Urethra · Renal Vessels · Skeleton',
+  '內分泌系統 3D 專頁': '3D Endocrine System',
+  '下視丘・腦下垂體・松果體・甲狀腺與副甲狀腺・胸腺・腎上腺・胰島・性腺': 'Hypothalamus · Pituitary · Pineal · Thyroid & Parathyroid · Thymus · Adrenal · Pancreas · Gonads',
+  '消化系統 3D 專頁': '3D Digestive System',
+  '口腔食道・胃・肝膽胰・小腸・大腸・骨骼系統': 'Esophagus · Stomach · Liver, Gallbladder & Pancreas · Intestines · Skeleton',
+  '｜互動人體解剖探索': ' | Interactive Anatomy Explorer',
+  '顯示 3D 構造引線標示': 'Show 3D structure callout labels',
+  '半透明骨骼模式 (透視內部器官)': 'Ghost bones mode (translucent skeleton)',
   '全部顯示': 'Show All',
   '隱藏此構造': 'Hide this structure',
   '載入解剖模型中...': 'Loading anatomical models...',
@@ -356,7 +382,7 @@ export function setLanguage(language) {
 /** The interface text for a Chinese source string, in the current language. */
 export const t = text => translate(text);
 
-const ATTRIBUTES = ['aria-label', 'title', 'content', 'alt'];
+const ATTRIBUTES = ['aria-label', 'title', 'content', 'alt', 'placeholder'];
 /** Put the static page into the current language. Dynamic text is written through t() by its owner. */
 export function translateDocument(root) {
   root.lang = current === 'en' ? 'en' : 'zh-Hant';

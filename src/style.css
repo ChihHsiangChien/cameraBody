@@ -175,6 +175,46 @@ ul { list-style: none; }
   border-radius: var(--r-sm);
 }
 
+/* Dedicated System Pages Navigation Bar */
+.system-pages-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+  z-index: 19;
+}
+.system-pages-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.system-page-tab {
+  font-size: var(--t-small);
+  font-weight: 500;
+  padding: 6px 14px;
+  white-space: nowrap;
+  border-radius: var(--r-sm);
+  background: var(--control);
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+  transition: background-color var(--m-in) var(--ease), border-color var(--m-in) var(--ease), color var(--m-in) var(--ease);
+}
+.system-page-tab:hover {
+  background: var(--control-hover);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.system-page-tab.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
 /* Main Workspace */
 .main-workspace {
   display: flex;
