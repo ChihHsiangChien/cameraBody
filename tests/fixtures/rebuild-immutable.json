@@ -3,14 +3,7 @@
     "public/anatomy/body.bin": "8f8a0b6877e2a5ec8a2109212fae24d7e7c03fdf1b73a97573a7de30db18f950",
     "public/anatomy/body.json": "dd308ea3a567f8043e35c21cd318f449ad3bba55af4aa4239de2948edf7c565b",
     "public/anatomy/muscles.bin": "d7b85c252518916e7ed05df98e96ea99d3c736e173332417678e9a0bf3fd8d6d",
-    "public/anatomy/muscles.json": "83d4ea746a7aa4504330dd703bedcb741ee70602b3732b945c3e9c4d1752a53e",
-    "public/anatomy/joints.bin": "741c60cfab6fabdf55e5e0e06b7ad2fd1df05954a9f8e9b325fe3b6ff738cad8",
-    "public/anatomy/joints.json": "45697b18b01bb72cc905cccdb75672dd8b71bc3906a00409eba4216f67674209",
-    "public/anatomy/individual-body.bin": "ee0e6abbe6e56ea6e1e538905202510d4d475f6eb8625e5c605e7ade9444e5f0",
-    "public/anatomy/individual-body.json": "68dd5a032db908be487c5a95cc24dcfe4d0adf04052f06182c8c859e9d5eef83",
-    "src/nerve-names.js": "0dc6025019802f7a25cce2a136f9d220d8db0548a2784301feff90d931794df2",
-    "src/anatomy-names.js": "281351eb886b78bac68508a8daff600bd2f2136ede689aa06e301c76ee6f1c6b",
-    "src/label-names.js": "fd22e43cda5a279c71b86fa801c297f5c7224b473f382356bb0a6f1bdbce00fa"
+    "public/anatomy/muscles.json": "83d4ea746a7aa4504330dd703bedcb741ee70602b3732b945c3e9c4d1752a53e"
   },
   "meshes": {
     "nerves": [

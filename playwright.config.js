@@ -1,4 +1,7 @@
+import { existsSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
+
+const localChromium = !process.env.CI && existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -8,18 +11,21 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'https://127.0.0.1:4173',
-    ignoreHTTPSErrors: true,
-    viewport: { width: 1280, height: 900 },
-    // The interface follows the browser language; the suite reads the Chinese source text unless a test asks for English.
+    baseURL: 'http://127.0.0.1:4174',
+    viewport: { width: 1440, height: 900 },
     locale: 'zh-TW',
     deviceScaleFactor: 1,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    launchOptions: { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] },
+    launchOptions: {
+      ...(localChromium ? { executablePath: localChromium } : {}),
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    },
   },
-  webServer: [
-    { command: 'npm run dev -- --host 127.0.0.1 --port 4173 --strictPort', url: 'https://127.0.0.1:4173', ignoreHTTPSErrors: true, reuseExistingServer: !process.env.CI, timeout: 120000 },
-    { command: 'node scripts/serve-test.mjs', url: 'http://127.0.0.1:4174', reuseExistingServer: !process.env.CI, timeout: 30000 },
-  ],
+  webServer: {
+    command: 'node scripts/serve-test.mjs',
+    url: 'http://127.0.0.1:4174',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
 });

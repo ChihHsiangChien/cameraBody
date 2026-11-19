@@ -42,7 +42,7 @@ npm test
 BASE_PATH=/human-anatomy-3d/ npm run build
 ```
 
-Production builds output static files to `dist/` and check bundle size budgets (`50 MB` total, `30 MB` excluding MediaPipe WASM). Pushes to `main` automatically build and deploy to GitHub Pages via [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) (`BASE_PATH=/${{ github.event.repository.name }}/`).
+Production builds output static files to `dist/` and check bundle size budgets (`≤ 15 MB` total, ~7 MB actual static assets). Pushes to `main` automatically build and deploy to GitHub Pages via [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) (`BASE_PATH=/${{ github.event.repository.name }}/`).
 
 ### Rebuilding Companion Organ Assets (`public/anatomy/organs-extra.*`)
 
@@ -54,23 +54,21 @@ tools/.venv/bin/pip install numpy fast-simplification
 tools/.venv/bin/python tools/build_organs_extra.py
 ```
 
-Downloaded source archives are cached under `tools/cache/` (gitignored). Existing base bundles in `public/anatomy/` (`body.*`, `head.*`, `muscles.*`, `joints.*`, `nerves.*`, `peripheral.*`) remain untouched and verified byte-for-byte by `tests/unit/rebuild-immutable.test.js`.
+Downloaded source archives are cached under `tools/cache/` (gitignored). Existing base bundles in `public/anatomy/` (`body.*`, `head.*`, `muscles.*`, `nerves.*`, `peripheral.*`) remain untouched and verified byte-for-byte by `tests/unit/rebuild-immutable.test.js`.
 
 ## Data Provenance, Attribution & Licenses
 
 Application source code is licensed under the **MIT License** (see [LICENSE](LICENSE)), building upon:
 - **[3D Anatomy Camera](https://github.com/keanu77/3D_anatomy_camera)** by **吳易澄** ([sportsmedicine.tw](https://sportsmedicine.tw/)), Copyright (c) 2026 吳易澄 (MIT License)
-- **[BodyVista](https://github.com/FreedomIntelligence/BodyVista)** by **FreedomAI** (MIT License; see [LICENSES/BodyVista.md](LICENSES/BodyVista.md))
 - Concept inspired by Hashem Al-Ghaili's X-Ray Mirror ([original post](https://x.com/HashemGhaili/status/2120202746121085321)).
 
-Anatomical models and reference texts retain their respective dataset licenses and are **not covered by the code's MIT license**:
+Anatomical models retain their respective dataset licenses and are **not covered by the code's MIT license**:
 
 | Material | Source and License |
 | --- | --- |
-| Body, head, hand, muscle, joint, optic & `organs-extra.*` meshes in `public/anatomy/` | [BodyParts3D 3.0, © DBCLS](LICENSES/BodyParts3D.md), CC BY-SA 2.1 Japan |
+| Body, head, hand, muscle, optic & `organs-extra.*` meshes in `public/anatomy/` | [BodyParts3D 3.0, © DBCLS](LICENSES/BodyParts3D.md), CC BY-SA 2.1 Japan |
 | Spinal cord segments in `nerves.*` | [Human Reference Atlas / HuBMAP](LICENSES/HRA-spinal-cord.md), CC BY 4.0 ([DOI:10.48539/HBM366.MTJD.685](https://doi.org/10.48539/HBM366.MTJD.685)) |
 | Peripheral nerves in `peripheral.*` | [Z-Anatomy](LICENSES/Z-Anatomy.md), CC BY-SA 4.0 (with underlying BodyParts3D attribution) |
-| Reference descriptions in `structure-info.json` | [English Wikipedia contributors](LICENSES/Wikipedia.md), CC BY-SA 4.0 |
 | Three.js | MIT License ([LICENSES/three-MIT.txt](LICENSES/three-MIT.txt)) |
 
 ## Educational Notice / Limits

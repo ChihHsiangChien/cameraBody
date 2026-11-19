@@ -99,52 +99,6 @@ describe('independent body-muscle asset contract', () => {
   });
 });
 
-describe('selected joint and connective-tissue asset contract', () => {
-  test('independent joint geometry is checksummed and uses the existing body reference frames', () => {
-    const data = rootRead('public/anatomy/joints.bin');
-    const meta = JSON.parse(rootRead('public/anatomy/joints.json'));
-    const body = JSON.parse(rootRead('public/anatomy/body.json'));
-    validateMeshBuffer(meta, data);
-    expect(data.length).toBeLessThanOrEqual(6_000_000);
-    expect(meta.binaryBytes).toBe(data.length);
-    expect(meta.binarySha256).toBe(sha(data));
-    for (const key of ['demoPose', 'demoAspect', 'referencePoseCm', 'torsoReferencePoseCm']) expect(meta[key], key).toEqual(body[key]);
-    const names = new Set(meta.meshes.map((mesh) => mesh.name));
-    for (const mesh of meta.meshes) {
-      expect(mesh.layer).toBe('joints');
-      expect(['torso', 'bone', 'foot']).toContain(mesh.frame);
-      expect(mesh.ni / 3, mesh.name).toBeLessThanOrEqual(mesh.triangleBudget);
-      expect(mesh.sourceElements.length, mesh.name).toBeGreaterThan(0);
-      expect(mesh.sourceConcepts.length, mesh.name).toBeGreaterThan(0);
-      if (mesh.frame !== 'torso') for (const id of mesh.landmarks) expect(Number.isInteger(id) && id >= 0 && id < 33).toBe(true);
-    }
-    expect(meta.labels.length).toBeGreaterThan(0);
-    for (const label of meta.labels) {
-      expect(label.layer).toBe('joints');
-      expect(names.has(label.mesh), label.t).toBe(true);
-      for (const point of label.pts) expect(point.length === 3 && point.every(Number.isFinite), label.t).toBe(true);
-    }
-  });
-  test('coverage preserves all 49 distinct source components and explicitly bounds the selected joint scope', () => {
-    const meta = JSON.parse(rootRead('public/anatomy/joints.json'));
-    const elements = meta.meshes.flatMap((mesh) => mesh.sourceElements);
-    expect(elements).toHaveLength(49);
-    expect(new Set(elements).size).toBe(elements.length);
-    expect([...elements].sort()).toEqual([...meta.source.elementIds].sort());
-    expect(meta.source.elementCount).toBe(49);
-    expect(meta.coverage.sourceComponents).toBe(49);
-    expect(meta.coverage.regionCount).toBe(meta.meshes.length);
-    for (const region of ['cervical_discs', 'thoracic_discs', 'lumbar_discs', 'costal_cartilage', 'inguinal_ligament', 'forearm_membrane', 'leg_membrane', 'achilles_tendon', 'plantar_ligament']) {
-      expect(meta.coverage.regions).toContain(region);
-      expect(meta.meshes.some((mesh) => mesh.region === region)).toBe(true);
-    }
-    expect(meta.coverage.scope).toMatch(/selected|not complete/i);
-    expect(meta.coverage.excluded.join(' ')).toMatch(/menisci.*cruciate|cruciate.*menisci/i);
-    expect(meta.license).toBeTruthy();
-    expect(meta.licenseUrl).toMatch(/^https?:\/\//);
-  });
-});
-
 describe('registered spinal cord and optic structure asset contract', () => {
   test('nine valid meshes retain 35 independently identified source components and per-source licenses', () => {
     const data = rootRead('public/anatomy/nerves.bin');

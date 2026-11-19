@@ -42,7 +42,7 @@ npm test
 BASE_PATH=/human-anatomy-3d/ npm run build
 ```
 
-建置產物輸出為純靜態 `dist/` 目錄，並檢查產出容量預算（總計 ≤ 50 MB，扣除 WASM ≤ 30 MB）。推送至 `main` 分支後，GitHub Actions（[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)）會自動執行建置並部署至 GitHub Pages（自動帶入 `BASE_PATH=/${{ github.event.repository.name }}/`）。
+建置產物輸出為純靜態 `dist/` 目錄，並檢查產出容量預算（總計 ≤ 15 MB，已移除舊版攝影機／MediaPipe 模型後約 7 MB）。推送至 `main` 分支後，GitHub Actions（[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)）會自動執行建置並部署至 GitHub Pages（自動帶入 `BASE_PATH=/${{ github.event.repository.name }}/`）。
 
 ### 重建擴充真實器官資料包（`public/anatomy/organs-extra.*`）
 
@@ -54,23 +54,21 @@ tools/.venv/bin/pip install numpy fast-simplification
 tools/.venv/bin/python tools/build_organs_extra.py
 ```
 
-下載檔案會快取於 `.gitignore` 的 `tools/cache/`；`public/anatomy/` 內既有的基礎資產（`body.*`、`head.*`、`muscles.*`、`joints.*`、`nerves.*`、`peripheral.*`）維持位元組完全不變，並由 `tests/unit/rebuild-immutable.test.js` 驗證保護。
+下載檔案會快取於 `.gitignore` 的 `tools/cache/`；`public/anatomy/` 內既有的基礎資產（`body.*`、`head.*`、`muscles.*`、`nerves.*`、`peripheral.*`）維持位元組完全不變，並由 `tests/unit/rebuild-immutable.test.js` 驗證保護。
 
 ## 資料來源、致謝與授權
 
-本專案獨立修改與擴充程式碼採 **MIT License**（見 [LICENSE](LICENSE)），並基於以下優秀開源專案衍生創作：
+本專案獨立修改與擴充程式碼採 **MIT License**（見 [LICENSE](LICENSE)），並基於以下開源專案衍生創作：
 - **[3D Anatomy Camera](https://github.com/keanu77/3D_anatomy_camera)** — 運動醫學科 **吳易澄醫師**（[sportsmedicine.tw](https://sportsmedicine.tw/)，Copyright (c) 2026 吳易澄，MIT License）
-- **[BodyVista](https://github.com/FreedomIntelligence/BodyVista)** — **FreedomAI 開源社群**（MIT License，見 [LICENSES/BodyVista.md](LICENSES/BodyVista.md)）
 - 構想啟發自 Hashem Al-Ghaili 的 X-Ray Mirror（[原貼文](https://x.com/HashemGhaili/status/2120202746121085321)）。
 
-3D 解剖網格與百科文字各自保留原始來源授權，**不適用程式碼的 MIT 授權**：
+3D 解剖網格各自保留原始來源授權，**不適用程式碼的 MIT 授權**：
 
 | 素材內容 | 來源與授權 |
 | --- | --- |
-| `public/anatomy/` 身體、頭手、肌肉、關節、視路徑與 `organs-extra.*` 器官網格 | [BodyParts3D 3.0, © DBCLS](LICENSES/BodyParts3D.md)，CC BY-SA 2.1 Japan |
+| `public/anatomy/` 身體、頭手、肌肉、視路徑與 `organs-extra.*` 器官網格 | [BodyParts3D 3.0, © DBCLS](LICENSES/BodyParts3D.md)，CC BY-SA 2.1 Japan |
 | `nerves.*` 脊髓節段 | [Human Reference Atlas / HuBMAP](LICENSES/HRA-spinal-cord.md)，CC BY 4.0（[DOI:10.48539/HBM366.MTJD.685](https://doi.org/10.48539/HBM366.MTJD.685)） |
 | `peripheral.*` 周邊神經與腦神經曲線 | [Z-Anatomy](LICENSES/Z-Anatomy.md)，CC BY-SA 4.0（保留其 BodyParts3D 來源標註） |
-| `structure-info.json` 參考條目 | [English Wikipedia contributors](LICENSES/Wikipedia.md)，CC BY-SA 4.0 |
 | Three.js | MIT License（[LICENSES/three-MIT.txt](LICENSES/three-MIT.txt)） |
 
 ## 教育用途說明與限制

@@ -16,7 +16,5 @@ tools/out/
 .cache/
 .Codex/
 .claude/
-public/mediapipe/wasm/
-public/models/*.task
 /public/licenses/
 /public/version.json
