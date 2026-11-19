@@ -130,6 +130,28 @@
           </div>
         </section>
 
+        <!-- Brain Hemispheres & Functional Cortical Labels Section -->
+        <section class="panel-section brain-mode-section">
+          <h3 class="section-title">大腦半球與功能標示</h3>
+          <div class="hemi-seg" role="group" aria-label="大腦半球與功能標示">
+            <button type="button" class="hemi-btn active" data-hemi="both">雙側半球</button>
+            <button type="button" class="hemi-btn" data-hemi="L">左大腦半球</button>
+            <button type="button" class="hemi-btn" data-hemi="R">右大腦半球</button>
+          </div>
+          <div class="setting-row separator-top">
+            <label class="toggle-label">
+              <input id="brain-pins-toggle" type="checkbox" checked>
+              <span>顯示大腦功能分區 3D 標示</span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <label class="toggle-label">
+              <input id="functional-colors-toggle" type="checkbox" checked>
+              <span>大腦功能分區圖譜配色</span>
+            </label>
+          </div>
+        </section>
+
         <!-- Dynamic Structure Hierarchy (Brain, Cranial, Cord, Peripheral, Skull, Skeleton) -->
         <div id="structure-hierarchy" class="hierarchy-container">
           <!-- Filled dynamically by main.js -->

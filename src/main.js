@@ -56,6 +56,7 @@ let currentSelectedStructure = null;
 // Initialize Neuro 3D Viewer
 const viewer = createNeuroViewer({
   container: stage,
+  lang: currentLang,
   onProgress: ({ percent, text, error }) => {
     if (loadingProgress) loadingProgress.style.width = `${percent}%`;
     if (loadingText) loadingText.textContent = t(text);
@@ -186,6 +187,7 @@ if (structureListContainer) {
 
       const colorDot = document.createElement('span');
       colorDot.className = 'color-dot';
+      colorDot.setAttribute('data-dot-id', item.id);
       colorDot.style.backgroundColor = item.color;
 
       const nameSpan = document.createElement('span');
@@ -252,6 +254,39 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
 if (ghostBonesCheckbox) {
   ghostBonesCheckbox.addEventListener('change', () => {
     viewer.setGhostBones(ghostBonesCheckbox.checked);
+  });
+}
+
+// Brain Hemisphere Selector ('both' | 'L' | 'R')
+document.querySelectorAll('.hemi-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.hemi-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const hemi = btn.getAttribute('data-hemi');
+    viewer.setBrainHemisphere(hemi);
+  });
+});
+
+// 3D Functional Brain Area Pins Toggle
+const brainPinsCheckbox = document.getElementById('brain-pins-toggle');
+if (brainPinsCheckbox) {
+  brainPinsCheckbox.addEventListener('change', () => {
+    viewer.setShowBrainPins(brainPinsCheckbox.checked);
+  });
+}
+
+// Functional Cortical Map Colors Toggle
+const functionalColorsCheckbox = document.getElementById('functional-colors-toggle');
+if (functionalColorsCheckbox) {
+  functionalColorsCheckbox.addEventListener('change', () => {
+    const enabled = functionalColorsCheckbox.checked;
+    viewer.setFunctionalColors(enabled);
+    for (const item of STRUCTURES) {
+      if (item.category === 'brain') {
+        const dot = document.querySelector(`span[data-dot-id="${item.id}"]`);
+        if (dot) dot.style.backgroundColor = enabled ? item.color : (item.naturalColor || item.color);
+      }
+    }
   });
 }
 

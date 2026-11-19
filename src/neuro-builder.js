@@ -197,26 +197,47 @@ export function splitGeometryByComponents(geometry, classifyComponent) {
   return result;
 }
 
-/** Split head.json's cerebrum & hindbrain into the 4 cerebral lobes + cerebellum + pons + medulla in viewer space. */
+/**
+ * Split head.json's cerebrum & hindbrain into:
+ * - 8 Functional Cortical Areas × Left/Right Hemispheres (_L and _R)
+ * - Midline Corpus Callosum (corpus_callosum_M)
+ * - Left & Right Cerebellar Hemispheres (brain_cerebellum_L, brain_cerebellum_R)
+ * - Pons/Midbrain (brain_pons) & Medulla Oblongata (brain_medulla)
+ */
 export function buildBrainRegions(headGeos, headCmMatrix, cmToViewer) {
   const fullHeadTransform = cmToViewer.clone().multiply(headCmMatrix);
 
-  // 1. Classify cerebrum (in canonical head cm space) into 4 lobes
-  const lobes = splitGeometryByComponents(headGeos.cerebrum, ({ cy, cz }) => {
-    if (cz < -11.0) return 'brain_occipital';
-    if (cy < 5.6 && cz < -2.5) return 'brain_temporal';
-    if (cz < -5.8 && cy >= 5.6) return 'brain_parietal';
-    return 'brain_frontal';
+  // 1. Classify cerebrum (in canonical head cm space) into 8 functional areas × L/R hemispheres + corpus callosum
+  const functionalAreas = splitGeometryByComponents(headGeos.cerebrum, ({ cx, cy, cz }) => {
+    if (Math.abs(cx) <= 0.15) return 'corpus_callosum_M';
+    const side = cx > 0 ? 'L' : 'R';
+    let area = 'func_temporal_limbic';
+    if (cz <= -12.15) {
+      area = 'func_visual';
+    } else if (cy > 9.5 && cz < -6.0 && cz > -7.8) {
+      area = 'func_motor';
+    } else if (cy > 9.5 && cz <= -7.8 && cz > -9.5) {
+      area = 'func_sensory';
+    } else if (cy >= 6.8 && cz <= -8.5 && cz > -12.15) {
+      area = 'func_parietal_assoc';
+    } else if (Math.abs(cx) > 5.0 && cy >= 3.5 && cy < 7.5 && cz <= -6.5 && cz > -10.0) {
+      area = 'func_wernicke_auditory';
+    } else if (Math.abs(cx) > 3.6 && cy >= 5.0 && cy < 9.2 && cz > -4.5) {
+      area = 'func_broca';
+    } else if (cz > -5.2 && cy >= 4.0) {
+      area = 'func_prefrontal';
+    }
+    return `${area}_${side}`;
   });
 
-  // 2. Classify hindbrain into cerebellum, pons/midbrain, and medulla oblongata
-  const hind = splitGeometryByComponents(headGeos.hindbrain, ({ minY, minZ }) => {
-    if (minZ < -10.0) return 'brain_cerebellum';
+  // 2. Classify hindbrain into Left/Right Cerebellum, Pons/Midbrain, and Medulla Oblongata
+  const hind = splitGeometryByComponents(headGeos.hindbrain, ({ cx, minY, minZ }) => {
+    if (minZ < -10.0) return cx >= 0 ? 'brain_cerebellum_L' : 'brain_cerebellum_R';
     if (minY < -1.0) return 'brain_medulla';
     return 'brain_pons';
   });
 
-  const regions = { ...lobes, ...hind };
+  const regions = { ...functionalAreas, ...hind };
   for (const g of Object.values(regions)) {
     g.applyMatrix4(fullHeadTransform);
     g.computeVertexNormals();
@@ -224,6 +245,34 @@ export function buildBrainRegions(headGeos, headCmMatrix, cmToViewer) {
     g.computeBoundingSphere();
   }
   return regions;
+}
+
+/**
+ * Split body.json's torso_skel into separate Vertebrae (Thoracic T1-T12, Lumbar L1-L5, Sacrum)
+ * and separate Ribcage/Sternum, Shoulder Girdle (Clavicles/Scapulae), and Pelvic Hip Bones.
+ */
+export function buildTorsoSkeletonParts(torsoGeo, torsoSf, cmToViewer) {
+  const torsoCm = torsoGeo.clone().applyMatrix4(makeCmMatrix(torsoSf));
+  const parts = splitGeometryByComponents(torsoCm, ({ cx, cy, cz, count }) => {
+    if (Math.abs(cx) < 1.0) {
+      if (cz > 12.0) return 'skel_ribcage';     // Sternum (manubrium, body, xiphoid)
+      if (cy > 107.5) return 'spine_thoracic'; // Thoracic vertebrae T1–T12
+      if (cy > 92.0) return 'spine_lumbar';    // Lumbar vertebrae L1–L5
+      return 'spine_sacrum';                   // Sacrum
+    }
+    if (cy < 95.0) return 'skel_pelvis';       // Left & right pelvic hip bones
+    if (count > 1000 && Math.abs(cx) > 10.0) return 'skel_shoulder'; // Scapulae
+    if (cy > 134.8 && Math.abs(cx) > 7.0) return 'skel_shoulder';    // Clavicles
+    return 'skel_ribcage';                     // 12 pairs of ribs
+  });
+
+  for (const g of Object.values(parts)) {
+    g.applyMatrix4(cmToViewer);
+    g.computeVertexNormals();
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+  }
+  return parts;
 }
 
 /**

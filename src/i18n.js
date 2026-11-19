@@ -54,6 +54,12 @@ const EN = Object.freeze({
   '神經系統 3D 畫面': '3D Nervous System View',
   '視角與操作工具': 'View & Navigation Tools',
   '選取 ': 'Select ',
+  '大腦半球與功能標示': 'Brain Hemispheres & Functional Labels',
+  '雙側半球': 'Both Hemispheres',
+  '左大腦半球': 'Left Hemisphere',
+  '右大腦半球': 'Right Hemisphere',
+  '顯示大腦功能分區 3D 標示': 'Show 3D functional brain labels',
+  '大腦功能分區圖譜配色': 'Functional cortical map colors',
 
   // Document and start screen
   '3D anatomy camera｜互動 3D 解剖相機': '3D anatomy camera | Interactive 3D anatomy in your camera',

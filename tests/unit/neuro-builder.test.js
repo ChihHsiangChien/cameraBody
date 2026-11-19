@@ -6,6 +6,7 @@ import {
   makeCmMatrix,
   makeCmToViewerMatrix,
   buildBrainRegions,
+  buildTorsoSkeletonParts,
   alignCervicalCordToMedulla,
   buildCranialNerves,
   buildSpinalNerveRoots,
@@ -48,16 +49,36 @@ describe('3D Nervous System & Skeleton builder verification', () => {
     expect(nervesGeos.optic_nerve_R.attributes.position.count).toBeGreaterThan(100);
   });
 
-  test('brain is divided into 4 cerebral lobes, cerebellum, pons/midbrain, and medulla with textbook colors', () => {
+  test('brain is divided into 8 functional cortical areas across Left and Right hemispheres, corpus callosum, cerebellum L/R, pons, and medulla', () => {
     const regions = buildBrainRegions(headGeos, headCmMatrix, cmToViewer);
     for (const key of [
-      'brain_frontal', 'brain_parietal', 'brain_temporal', 'brain_occipital',
-      'brain_cerebellum', 'brain_pons', 'brain_medulla',
+      'func_motor_L', 'func_motor_R',
+      'func_sensory_L', 'func_sensory_R',
+      'func_broca_L', 'func_broca_R',
+      'func_wernicke_auditory_L', 'func_wernicke_auditory_R',
+      'func_prefrontal_L', 'func_prefrontal_R',
+      'func_parietal_assoc_L', 'func_parietal_assoc_R',
+      'func_visual_L', 'func_visual_R',
+      'func_temporal_limbic_L', 'func_temporal_limbic_R',
+      'corpus_callosum_M',
+      'brain_cerebellum_L', 'brain_cerebellum_R',
+      'brain_pons', 'brain_medulla',
     ]) {
       expect(regions[key], key).toBeDefined();
       expect(regions[key].attributes.position.count, key).toBeGreaterThan(500);
     }
-    expect(CATEGORIES.length).toBe(7);
+    expect(CATEGORIES.length).toBe(8);
+  });
+
+  test('torso skeleton separates thoracic spine, lumbar spine, and sacrum from ribcage, shoulder girdle, and pelvic hip bones', () => {
+    const torsoEntry = bodyMeta.meshes.find(m => m.name === 'torso_skel');
+    const parts = buildTorsoSkeletonParts(bodyGeos.torso_skel, torsoEntry.sourceFrame, cmToViewer);
+    expect(parts.spine_thoracic.attributes.position.count).toBe(5331);
+    expect(parts.spine_lumbar.attributes.position.count).toBe(2921);
+    expect(parts.spine_sacrum.attributes.position.count).toBe(1697);
+    expect(parts.skel_ribcage.attributes.position.count).toBe(13306);
+    expect(parts.skel_shoulder.attributes.position.count).toBe(3064);
+    expect(parts.skel_pelvis.attributes.position.count).toBe(1228);
   });
 
   test('cervical spinal cord superior pole aligns coaxially with the medulla oblongata inferior pole', () => {
