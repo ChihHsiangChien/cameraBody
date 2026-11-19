@@ -1,92 +1,73 @@
 import * as THREE from 'three';
 import { decodeGeometry } from './geometry.js';
-import { CATEGORIES, STRUCTURES } from './neuro-data.js';
+import { STRUCTURES } from './neuro-data.js';
+import {
+  makeCmMatrix,
+  makeCmToViewerMatrix,
+  buildBrainRegions,
+  alignCervicalCordToMedulla,
+  buildCranialNerves,
+  buildSpinalNerveRoots,
+  buildHandBonesAndNerves,
+} from './neuro-builder.js';
 
-// Center reference in BodyParts3D cm: spine mid-height Y ~ 115cm, Z ~ 8cm, X = 0.
-const NORM_SCALE = 0.01; // cm to meters
-const OFFSET_Y = -1.15;  // meters
-const OFFSET_Z = -0.08;  // meters
-
-// Create transformation matrix for a mesh into unified normalized world space (in meters)
-function computeNormalizationMatrix(sourceFrame) {
-  const c0 = sourceFrame.basisColumnsCm[0];
-  const c1 = sourceFrame.basisColumnsCm[1];
-  const c2 = sourceFrame.basisColumnsCm[2];
-  const o = sourceFrame.originCm;
-
-  // BodyParts3D cm matrix
-  const matCm = new THREE.Matrix4().set(
-    c0[0], c1[0], c2[0], o[0],
-    c0[1], c1[1], c2[1], o[1],
-    c0[2], c1[2], c2[2], o[2],
-    0,     0,     0,     1
-  );
-
-  // Scaled & centered matrix in meters
-  const scaleAndShift = new THREE.Matrix4().makeTranslation(0, OFFSET_Y, OFFSET_Z)
-    .multiply(new THREE.Matrix4().makeScale(NORM_SCALE, NORM_SCALE, NORM_SCALE));
-
-  return scaleAndShift.multiply(matCm);
-}
-
-// Custom cyber-medical shader for glowing nervous structures
-function createNerveMaterial(colorHex, { isHighlight = false } = {}) {
-  const vertexShader = `
-    varying vec3 vNormal;
-    varying vec3 vViewPosition;
-    void main() {
-      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      vViewPosition = -mvPosition.xyz;
-      vNormal = normalize(normalMatrix * normal);
-      gl_Position = projectionMatrix * mvPosition;
-    }
-  `;
-
-  const fragmentShader = `
-    uniform vec3 uColor;
-    uniform float uOpacity;
-    uniform float uGlowStrength;
-    varying vec3 vNormal;
-    varying vec3 vViewPosition;
-
-    void main() {
-      vec3 normal = normalize(vNormal);
-      vec3 viewDir = normalize(vViewPosition);
-      float rim = 1.0 - abs(dot(normal, viewDir));
-      rim = pow(rim, 1.8);
-
-      vec3 lightDir = normalize(vec3(0.3, 0.8, 1.0));
-      float diff = max(0.25, dot(normal, lightDir));
-
-      vec3 finalColor = uColor * (diff * 0.75 + rim * uGlowStrength + 0.35);
-      gl_FragColor = vec4(finalColor, uOpacity);
-    }
-  `;
-
-  return new THREE.ShaderMaterial({
-    vertexShader,
-    fragmentShader,
-    uniforms: {
-      uColor: { value: new THREE.Color(colorHex) },
-      uOpacity: { value: isHighlight ? 1.0 : 0.92 },
-      uGlowStrength: { value: isHighlight ? 2.5 : 1.4 },
-    },
-    transparent: true,
+// Opaque, realistic medical textbook material for brain regions and spinal cord
+function createTextbookTissueMaterial(colorHex, { isCord = false } = {}) {
+  return new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(colorHex),
+    roughness: isCord ? 0.42 : 0.48,
+    metalness: 0.02,
+    clearcoat: 0.16,
+    clearcoatRoughness: 0.38,
+    transparent: false,
+    opacity: 1.0,
+    depthWrite: true,
     depthTest: true,
-    depthWrite: false,
     side: THREE.DoubleSide,
-    blending: THREE.NormalBlending,
   });
 }
 
-// Material for bone structures (supports solid & translucent ghost mode)
+// Opaque, crisp medical textbook yellow material for cranial and spinal peripheral nerves
+function createTextbookNerveMaterial(colorHex) {
+  const c = new THREE.Color(colorHex);
+  return new THREE.MeshStandardMaterial({
+    color: c,
+    emissive: c,
+    emissiveIntensity: 0.16,
+    roughness: 0.36,
+    metalness: 0.05,
+    transparent: false,
+    opacity: 1.0,
+    depthWrite: true,
+    depthTest: true,
+    side: THREE.DoubleSide,
+  });
+}
+
+// Highlight material for selected structure
+function createHighlightMaterial() {
+  return new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#38bdf8'),
+    emissive: new THREE.Color('#0284c7'),
+    emissiveIntensity: 0.85,
+    roughness: 0.25,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.95,
+    depthTest: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+}
+
+// Material for bone structures (supports solid osteological ivory & translucent ghost mode)
 function createBoneMaterial(colorHex, { ghost = false } = {}) {
   return new THREE.MeshStandardMaterial({
     color: new THREE.Color(colorHex),
-    roughness: 0.45,
-    metalness: 0.1,
-    transparent: true,
-    opacity: ghost ? 0.32 : 0.88,
+    roughness: 0.52,
+    metalness: 0.06,
+    transparent: ghost,
+    opacity: ghost ? 0.32 : 1.0,
     depthWrite: !ghost,
     depthTest: true,
     side: THREE.DoubleSide,
@@ -145,7 +126,7 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#0a0e17');
 
-  const camera = new THREE.PerspectiveCamera(42, width / height, 0.05, 50.0);
+  const camera = new THREE.PerspectiveCamera(42, width / height, 0.02, 50.0);
   camera.position.set(0, 0.12, 1.35);
 
   const renderer = new THREE.WebGLRenderer({
@@ -156,23 +137,23 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
   renderer.setSize(width, height);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.25;
+  renderer.toneMappingExposure = 1.12;
   container.appendChild(renderer.domElement);
 
-  // Lighting setup
-  const ambientLight = new THREE.AmbientLight('#94a3b8', 0.9);
-  scene.add(ambientLight);
+  // Balanced medical illustration studio lighting
+  const hemiLight = new THREE.HemisphereLight('#f8fafc', '#1e293b', 0.95);
+  scene.add(hemiLight);
 
-  const mainLight = new THREE.DirectionalLight('#ffffff', 1.8);
-  mainLight.position.set(1.5, 3.0, 2.0);
+  const mainLight = new THREE.DirectionalLight('#fffaf0', 1.55);
+  mainLight.position.set(1.8, 2.6, 2.4);
   scene.add(mainLight);
 
-  const rimLight = new THREE.DirectionalLight('#38bdf8', 1.2);
-  rimLight.position.set(-2.0, 1.0, -1.5);
-  scene.add(rimLight);
+  const backLight = new THREE.DirectionalLight('#e2e8f0', 1.15);
+  backLight.position.set(-1.6, 1.5, -2.2);
+  scene.add(backLight);
 
-  const bottomFill = new THREE.DirectionalLight('#818cf8', 0.6);
-  bottomFill.position.set(0, -2.5, 1.0);
+  const bottomFill = new THREE.DirectionalLight('#94a3b8', 0.55);
+  bottomFill.position.set(0, -2.5, 1.2);
   scene.add(bottomFill);
 
   // Group containing all normalized anatomy
@@ -183,25 +164,26 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
   const meshesByName = new Map();
   const meshesByStructureId = new Map();
   const structureStates = new Map();
-  let ghostBones = false;
+  let ghostBones = true;
   let silhouetteOpacity = 0.22;
   let silhouetteMaterial = null;
 
   // Orbit & Pan & Zoom interaction state
   let yaw = 0.28;
-  let pitch = 0.08;
-  let distance = 1.35;
+  let pitch = 0.06;
+  let distance = 1.52;
   let targetYaw = yaw;
   let targetPitch = pitch;
   let targetDistance = distance;
 
-  const pivot = new THREE.Vector3(0, 0.08, 0);
+  const pivot = new THREE.Vector3(0, -0.02, 0);
   const targetPivot = pivot.clone();
 
   let isDragging = false;
   let isPanning = false;
   let dragMode = 'orbit'; // 'orbit' or 'pan'
   let previousMousePosition = { x: 0, y: 0 };
+  let pointerDownPos = { x: 0, y: 0 };
   let touchStartDistance = 0;
   let touchStartCenter = { x: 0, y: 0 };
 
@@ -209,7 +191,7 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
   let selectedStructureId = null;
-  let highlightMesh = null;
+  let highlightGroup = null;
 
   // Initialize visibility state for all structures
   for (const item of STRUCTURES) {
@@ -219,14 +201,14 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
 
   // Camera views preset definitions
   const VIEW_PRESETS = {
-    default: { yaw: 0.28, pitch: 0.08, dist: 1.35, pivot: [0, 0.08, 0] },
-    front: { yaw: 0, pitch: 0, dist: 1.35, pivot: [0, 0.08, 0] },
-    back: { yaw: Math.PI, pitch: 0, dist: 1.35, pivot: [0, 0.08, 0] },
-    left: { yaw: -Math.PI / 2, pitch: 0, dist: 1.35, pivot: [0, 0.08, 0] },
-    right: { yaw: Math.PI / 2, pitch: 0, dist: 1.35, pivot: [0, 0.08, 0] },
+    default: { yaw: 0.28, pitch: 0.06, dist: 1.52, pivot: [0, -0.02, 0] },
+    front: { yaw: 0, pitch: 0, dist: 1.52, pivot: [0, -0.02, 0] },
+    back: { yaw: Math.PI, pitch: 0, dist: 1.52, pivot: [0, -0.02, 0] },
+    left: { yaw: -Math.PI / 2, pitch: 0, dist: 1.52, pivot: [0, -0.02, 0] },
+    right: { yaw: Math.PI / 2, pitch: 0, dist: 1.52, pivot: [0, -0.02, 0] },
     top: { yaw: 0, pitch: Math.PI / 2.2, dist: 1.45, pivot: [0, 0.08, 0] },
-    head: { yaw: 0.3, pitch: 0.05, dist: 0.65, pivot: [0, 0.38, 0.02] },
-    spine: { yaw: Math.PI * 0.95, pitch: 0.05, dist: 0.95, pivot: [0, 0.08, -0.02] },
+    head: { yaw: 0.35, pitch: 0.05, dist: 0.38, pivot: [0, 0.38, 0.03] },
+    spine: { yaw: Math.PI * 0.92, pitch: 0.05, dist: 0.92, pivot: [0, 0.06, -0.02] },
     full: { yaw: 0.25, pitch: 0.05, dist: 2.2, pivot: [0, -0.35, 0] },
   };
 
@@ -257,7 +239,7 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
         fetch(assetUrl('anatomy/muscles.bin')).then(r => r.arrayBuffer()),
       ]);
 
-      onProgress?.({ percent: 55, text: '解析 3D 幾何結構...' });
+      onProgress?.({ percent: 50, text: '解析 3D 幾何結構...' });
 
       // Decode raw geometries
       const headGeos = decodeGeometry(headMeta, headBuf);
@@ -266,31 +248,100 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       const bodyGeos = decodeGeometry(bodyMeta, bodyBuf);
       const musclesGeos = decodeGeometry(musclesMeta, musclesBuf);
 
-      // The head canonical-space transform matrix
+      const cmToViewer = makeCmToViewerMatrix();
       const headSourceFrame = periMeta.meshes.find(m => m.name === 'pn_head_L').sourceFrame;
-      const headMatrix = computeNormalizationMatrix(headSourceFrame);
+      const headCmMatrix = makeCmMatrix(headSourceFrame);
+      const fullHeadMatrix = cmToViewer.clone().multiply(headCmMatrix);
 
       silhouetteMaterial = createSilhouetteMaterial();
 
-      // Helper to instantiate and add a mesh
-      function addStructureMesh(item, meshName, geo, sf) {
-        if (!geo) return;
-        const normMatrix = sf ? computeNormalizationMatrix(sf) : headMatrix;
-        geo.applyMatrix4(normMatrix);
-        geo.computeVertexNormals();
-        geo.computeBoundingBox();
-        geo.computeBoundingSphere();
+      onProgress?.({ percent: 70, text: '建立中樞與周邊神經系統...' });
 
-        let mat;
+      // 1. Build split brain regions (4 cerebral lobes + cerebellum + pons/midbrain + medulla)
+      const brainRegionGeos = buildBrainRegions(headGeos, headCmMatrix, cmToViewer);
+
+      // 2. Align upper cervical spinal cord (cord_cervical) coaxially with the medulla oblongata
+      const headHindbrainCm = headGeos.hindbrain.clone().applyMatrix4(headCmMatrix);
+      const cordCervSf = nervesMeta.meshes.find(m => m.name === 'cord_cervical').sourceFrame;
+      const cordCervCm = alignCervicalCordToMedulla(nervesGeos.cord_cervical, cordCervSf, headHindbrainCm);
+      const cordThorCm = nervesGeos.cord_thoracic.clone().applyMatrix4(
+        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_thoracic').sourceFrame)
+      );
+      const cordLumbCm = nervesGeos.cord_lumbar.clone().applyMatrix4(
+        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_lumbar').sourceFrame)
+      );
+      const cordSacrCm = nervesGeos.cord_sacral.clone().applyMatrix4(
+        makeCmMatrix(nervesMeta.meshes.find(m => m.name === 'cord_sacral').sourceFrame)
+      );
+
+      // Convert aligned cord geometries into viewer space
+      const alignedCordGeos = {
+        cord_cervical: cordCervCm.clone().applyMatrix4(cmToViewer),
+        cord_thoracic: cordThorCm.clone().applyMatrix4(cmToViewer),
+        cord_lumbar: cordLumbCm.clone().applyMatrix4(cmToViewer),
+        cord_sacral: cordSacrCm.clone().applyMatrix4(cmToViewer),
+      };
+      for (const g of Object.values(alignedCordGeos)) {
+        g.computeVertexNormals();
+        g.computeBoundingBox();
+        g.computeBoundingSphere();
+      }
+
+      // 3. Build all 12 pairs of Cranial Nerves (CN I – CN XII)
+      const cranialNerveGeos = buildCranialNerves(periMeta, periGeos, headCmMatrix, cmToViewer);
+
+      // 4. Build Spinal Nerve Roots & Cauda Equina connecting the spinal cord to all spinal nerves
+      const spinalRootGeos = buildSpinalNerveRoots(
+        [cordCervCm, cordThorCm, cordLumbCm, cordSacrCm],
+        periMeta,
+        periGeos,
+        cmToViewer
+      );
+
+      // 5. Build Left and Right Hand Bones and Hand Peripheral Nerves
+      const handGeos = buildHandBonesAndNerves(headGeos, periMeta, periGeos, cmToViewer);
+
+      // Combine all custom pre-transformed viewer-space geometries
+      const customViewerGeos = {
+        ...brainRegionGeos,
+        ...cranialNerveGeos,
+        ...spinalRootGeos,
+        ...handGeos,
+      };
+
+      // Helper to create material by category
+      function createMaterialForStructure(item) {
         if (item.category === 'skeleton' || item.category === 'skull') {
-          mat = createBoneMaterial(item.color, { ghost: ghostBones });
-        } else if (item.category === 'silhouette') {
-          mat = silhouetteMaterial;
-        } else {
-          mat = createNerveMaterial(item.color);
+          return createBoneMaterial(item.color, { ghost: ghostBones });
         }
+        if (item.category === 'silhouette') {
+          return silhouetteMaterial;
+        }
+        if (item.category === 'brain') {
+          return createTextbookTissueMaterial(item.color, { isCord: false });
+        }
+        if (item.category === 'spinalCord') {
+          return createTextbookTissueMaterial(item.color, { isCord: true });
+        }
+        return createTextbookNerveMaterial(item.color);
+      }
 
-        const mesh = new THREE.Mesh(geo, mat);
+      // Helper to register and add a mesh (either already in viewer space or needing transform)
+      function addStructureMesh(item, meshName, geo, transformMatrix = null) {
+        if (!geo) return;
+        const finalGeo = transformMatrix ? geo.clone().applyMatrix4(transformMatrix) : geo;
+        finalGeo.computeVertexNormals();
+        finalGeo.computeBoundingBox();
+        finalGeo.computeBoundingSphere();
+
+        const mat = createMaterialForStructure(item);
+        const mesh = new THREE.Mesh(finalGeo, mat);
+        mesh.renderOrder =
+          item.category === 'silhouette'
+            ? 3
+            : item.category === 'skeleton' || item.category === 'skull'
+              ? 2
+              : 1;
         mesh.userData = {
           structureId: item.id,
           category: item.category,
@@ -304,24 +355,31 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
         meshesByStructureId.get(item.id).push(mesh);
       }
 
-      onProgress?.({ percent: 75, text: '建立中樞與周邊神經系統...' });
-
-      // Build registered structures
+      // Instantiate all structures from STRUCTURES
       for (const item of STRUCTURES) {
         for (const mName of item.meshes) {
-          if (item.bundle === 'head') {
-            addStructureMesh(item, mName, headGeos[mName], null);
+          if (customViewerGeos[mName]) {
+            addStructureMesh(item, mName, customViewerGeos[mName], null);
+          } else if (alignedCordGeos[mName]) {
+            addStructureMesh(item, mName, alignedCordGeos[mName], null);
+          } else if (item.bundle === 'head') {
+            addStructureMesh(item, mName, headGeos[mName], fullHeadMatrix);
           } else if (item.bundle === 'nerves') {
             const entry = nervesMeta.meshes.find(m => m.name === mName);
-            const sf = entry?.frame === 'head' ? null : entry?.sourceFrame;
-            addStructureMesh(item, mName, nervesGeos[mName], sf);
+            const mat = entry?.frame === 'head'
+              ? fullHeadMatrix
+              : cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, nervesGeos[mName], mat);
           } else if (item.bundle === 'peripheral') {
             const entry = periMeta.meshes.find(m => m.name === mName);
-            const sf = entry?.frame === 'head' ? null : entry?.sourceFrame;
-            addStructureMesh(item, mName, periGeos[mName], sf);
+            const mat = entry?.frame === 'head'
+              ? fullHeadMatrix
+              : cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, periGeos[mName], mat);
           } else if (item.bundle === 'body') {
             const entry = bodyMeta.meshes.find(m => m.name === mName);
-            addStructureMesh(item, mName, bodyGeos[mName], entry?.sourceFrame);
+            const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+            addStructureMesh(item, mName, bodyGeos[mName], mat);
           }
         }
       }
@@ -341,7 +399,8 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
         const geo = musclesGeos[mName];
         const entry = musclesMeta.meshes.find(m => m.name === mName);
         if (geo && entry?.sourceFrame) {
-          addStructureMesh(silhouetteItem, mName, geo, entry.sourceFrame);
+          const mat = cmToViewer.clone().multiply(makeCmMatrix(entry.sourceFrame));
+          addStructureMesh(silhouetteItem, mName, geo, mat);
         }
       }
 
@@ -382,6 +441,7 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
     isDragging = true;
     isPanning = e.button === 2 || e.shiftKey || dragMode === 'pan';
     previousMousePosition = { x: e.clientX, y: e.clientY };
+    pointerDownPos = { x: e.clientX, y: e.clientY };
   }
 
   function onPointerMove(e) {
@@ -391,7 +451,6 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
     previousMousePosition = { x: e.clientX, y: e.clientY };
 
     if (isPanning) {
-      // Pan camera in view plane
       const panSpeed = distance * 0.0016;
       const right = new THREE.Vector3();
       const up = new THREE.Vector3();
@@ -400,7 +459,6 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       targetPivot.addScaledVector(right, -deltaX * panSpeed);
       targetPivot.addScaledVector(up, deltaY * panSpeed);
     } else {
-      // Orbit
       const orbitSpeed = 0.0065;
       targetYaw -= deltaX * orbitSpeed;
       targetPitch += deltaY * orbitSpeed;
@@ -408,8 +466,11 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
   }
 
   function onPointerUp(e) {
-    if (isDragging && Math.abs(e.clientX - previousMousePosition.x) < 3 && Math.abs(e.clientY - previousMousePosition.y) < 3) {
-      // It was a click / tap! Perform raycasting
+    if (
+      isDragging &&
+      Math.abs(e.clientX - pointerDownPos.x) < 4 &&
+      Math.abs(e.clientY - pointerDownPos.y) < 4
+    ) {
       pickAt(e.clientX, e.clientY);
     }
     isDragging = false;
@@ -418,7 +479,7 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
   function onWheel(e) {
     e.preventDefault();
     const zoomSpeed = 0.0015;
-    targetDistance = Math.max(0.25, Math.min(3.8, targetDistance * (1 + e.deltaY * zoomSpeed)));
+    targetDistance = Math.max(0.22, Math.min(3.8, targetDistance * (1 + e.deltaY * zoomSpeed)));
   }
 
   // Touch handlers
@@ -427,6 +488,7 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       isDragging = true;
       isPanning = dragMode === 'pan';
       previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      pointerDownPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     } else if (e.touches.length === 2) {
       isDragging = false;
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -463,7 +525,7 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       const currentDist = Math.hypot(dx, dy);
       if (touchStartDistance > 0) {
         const factor = touchStartDistance / currentDist;
-        targetDistance = Math.max(0.25, Math.min(3.8, targetDistance * factor));
+        targetDistance = Math.max(0.22, Math.min(3.8, targetDistance * factor));
         touchStartDistance = currentDist;
       }
 
@@ -499,7 +561,6 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
 
     raycaster.setFromCamera(mouse, camera);
 
-    // Pick among visible anatomical meshes (skip silhouette so user picks organs/bones)
     const candidates = [];
     for (const mesh of meshesByName.values()) {
       if (mesh.visible && mesh.userData?.category !== 'silhouette') {
@@ -517,14 +578,19 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
     }
   }
 
+  function clearHighlight() {
+    if (!highlightGroup) return;
+    highlightGroup.removeFromParent();
+    for (const child of highlightGroup.children) {
+      child.geometry.dispose();
+      child.material.dispose();
+    }
+    highlightGroup = null;
+  }
+
   function selectStructure(structId) {
     selectedStructureId = structId;
-    if (highlightMesh) {
-      highlightMesh.removeFromParent();
-      highlightMesh.geometry.dispose();
-      highlightMesh.material.dispose();
-      highlightMesh = null;
-    }
+    clearHighlight();
 
     if (!structId) {
       onSelect?.(null);
@@ -535,18 +601,15 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
     const meshes = meshesByStructureId.get(structId) || [];
 
     if (structure && meshes.length > 0) {
-      // Build glowing highlight overlay on the foremost mesh
-      const primaryMesh = meshes[0];
-      const hlGeo = primaryMesh.geometry.clone();
-      const hlMat = createNerveMaterial('#ffffff', { isHighlight: true });
-      hlMat.uniforms.uColor.value.set('#38bdf8');
-      hlMat.uniforms.uOpacity.value = 1.0;
-      hlMat.uniforms.uGlowStrength.value = 3.0;
-
-      highlightMesh = new THREE.Mesh(hlGeo, hlMat);
-      highlightMesh.renderOrder = 999;
-      root.add(highlightMesh);
-
+      highlightGroup = new THREE.Group();
+      for (const m of meshes) {
+        const hlGeo = m.geometry.clone();
+        const hlMat = createHighlightMaterial();
+        const hlMesh = new THREE.Mesh(hlGeo, hlMat);
+        hlMesh.renderOrder = 999;
+        highlightGroup.add(hlMesh);
+      }
+      root.add(highlightGroup);
       onSelect?.(structure);
     } else {
       onSelect?.(null);
@@ -580,11 +643,12 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
     animationFrameId = requestAnimationFrame(animate);
     updateCamera();
 
-    // Subtle breathing pulse on highlight
-    if (highlightMesh) {
-      const t = performance.now() * 0.004;
-      const pulse = 2.0 + Math.sin(t) * 1.0;
-      highlightMesh.material.uniforms.uGlowStrength.value = pulse;
+    if (highlightGroup) {
+      const t = performance.now() * 0.005;
+      const pulse = 0.65 + Math.sin(t) * 0.35;
+      for (const child of highlightGroup.children) {
+        child.material.emissiveIntensity = pulse;
+      }
     }
 
     renderer.render(scene, camera);
@@ -596,7 +660,6 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
 
   // Public Viewer API
   return {
-    // Visibility
     toggleStructure(id, visible) {
       structureStates.set(id, visible);
       const meshes = meshesByStructureId.get(id) || [];
@@ -616,14 +679,14 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       return structureStates.get(id) !== false;
     },
 
-    // Ghost Bones mode (semi-transparent skeleton so cord & nerves shine through)
     setGhostBones(ghost) {
       ghostBones = !!ghost;
       for (const item of STRUCTURES) {
         if (item.category === 'skeleton' || item.category === 'skull') {
           const meshes = meshesByStructureId.get(item.id) || [];
           for (const m of meshes) {
-            m.material.opacity = ghostBones ? 0.32 : 0.88;
+            m.material.transparent = ghostBones;
+            m.material.opacity = ghostBones ? 0.32 : 1.0;
             m.material.depthWrite = !ghostBones;
             m.material.needsUpdate = true;
           }
@@ -635,7 +698,6 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       return ghostBones;
     },
 
-    // Silhouette opacity
     setSilhouetteOpacity(val) {
       silhouetteOpacity = Math.max(0, Math.min(1, val));
       if (silhouetteMaterial) {
@@ -647,7 +709,6 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       return silhouetteOpacity;
     },
 
-    // Presets
     applyPreset(name) {
       if (name === 'all') {
         for (const item of STRUCTURES) this.toggleStructure(item.id, true);
@@ -660,11 +721,15 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
         this.toggleStructure('silhouetteMesh', true);
       } else if (name === 'nervesAndSpine') {
         for (const item of STRUCTURES) {
-          const isNerveOrSpine = ['brain', 'cranialNerves', 'spinalCord', 'peripheralNerves', 'skull'].includes(item.category)
-            || item.id === 'cervicalSpine' || item.id === 'torsoSkeleton';
+          const isNerveOrSpine =
+            ['brain', 'cranialNerves', 'spinalCord', 'peripheralNerves', 'skull'].includes(item.category) ||
+            item.id === 'cervicalSpine' ||
+            item.id === 'torsoSkeleton';
           this.toggleStructure(item.id, isNerveOrSpine);
         }
-        this.toggleStructure('limbBones', false);
+        this.toggleStructure('upperLimbBones', false);
+        this.toggleStructure('handBones', false);
+        this.toggleStructure('lowerLimbBones', false);
         this.toggleStructure('silhouetteMesh', true);
         this.setGhostBones(true);
       } else if (name === 'nervesAndSkeleton') {
@@ -673,7 +738,6 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       }
     },
 
-    // View Angle Camera Presets
     setView(viewKey) {
       const p = VIEW_PRESETS[viewKey] || VIEW_PRESETS.default;
       targetYaw = p.yaw;
@@ -682,15 +746,13 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       targetPivot.set(p.pivot[0], p.pivot[1], p.pivot[2]);
     },
 
-    // Zoom buttons
     zoomIn() {
-      targetDistance = Math.max(0.25, targetDistance * 0.78);
+      targetDistance = Math.max(0.22, targetDistance * 0.78);
     },
     zoomOut() {
       targetDistance = Math.min(3.8, targetDistance * 1.25);
     },
 
-    // Interaction drag mode
     setDragMode(mode) {
       dragMode = mode === 'pan' ? 'pan' : 'orbit';
     },
@@ -698,10 +760,8 @@ export function createNeuroViewer({ container, onProgress, onSelect }) {
       return dragMode;
     },
 
-    // Select structure programmatically
     selectStructure,
 
-    // Cleanup
     dispose() {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', onResize);

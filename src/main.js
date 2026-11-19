@@ -197,7 +197,7 @@ if (structureListContainer) {
       focusBtn.className = 'item-focus-btn';
       focusBtn.title = currentLang === 'en' ? 'Select & Inspect' : '選取並查看';
       focusBtn.setAttribute('aria-label', currentLang === 'en' ? `Select ${item.nameEn}` : `選取 ${item.nameZh}`);
-      focusBtn.innerHTML = '🔍';
+      focusBtn.textContent = '⌖';
       focusBtn.addEventListener('click', e => {
         e.stopPropagation();
         viewer.selectStructure(item.id);
