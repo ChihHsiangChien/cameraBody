@@ -1,279 +1,307 @@
-import { loadSettings, LAYERS, BODY_LAYERS, applyFocus, applyPreset } from './settings.js';
-import { regionById, layerShown } from './regions.js';
-import { createCamera } from './camera.js';
-import { createTrackers } from './trackers.js';
-import { bindUI } from './ui.js';
-import { createSystemsUI } from './ui-systems.js';
-import { demoStageAspect } from './demo-pose.js';
-import { bindIntroPictures } from './intro-pictures.js';
-import { resolveLanguage, setLanguage, getLanguage, translateDocument, t } from './i18n.js';
+import { setLanguage, resolveLanguage, translateDocument, t } from './i18n.js';
+import { CATEGORIES, STRUCTURES } from './neuro-data.js';
+import { createNeuroViewer } from './neuro-viewer.js';
 
-const settings = loadSettings();
-const hash = new URLSearchParams(location.hash.slice(1)), query = new URLSearchParams(location.search);
-// The language is fixed for the life of the page; choosing the other one reloads it.
-setLanguage(resolveLanguage({ requested: query.get('lang') || hash.get('lang'), stored: settings.language, preferred: navigator.languages?.length ? navigator.languages : [navigator.language] }));
-translateDocument(document.documentElement);
-// Stage labels start in the interface language until the viewer has chosen a label language.
-try { if (getLanguage() === 'en' && !Object.hasOwn(JSON.parse(localStorage.getItem('xr_settings') || '{}') || {}, 'labelLanguage')) settings.labelLanguage = 'en'; } catch { /* Unreadable storage keeps the defaults. */ }
-const has = key => hash.has(key) || query.has(key);
-const state = { paused: false, mirror: !has('rear'), performance: settings.performance === 'auto' ? (matchMedia('(max-width:900px)').matches ? 'balanced' : 'high') : settings.performance, mode: 'intro' };
-const $ = id => document.getElementById(id), video = $('video');
-let scene, scenePromise, raf = 0, operation = 0, lastVideoTime = -1, preparing = false, pendingChange = false, changeTask = null, trackingWarning = '';
-let autoAt = 0, lowChecks = 0, lastFrameAt = 0;
-// What the tracking session was last prepared for, and when; see changed().
-let preparedFor = null, preparedAt = 0;
-const ui = bindUI({ settings, onChange: changed, onStart: start, onDemo: demo, onSwitch: switchCamera, onStop: stop });
-const systemsUI = createSystemsUI({
-  stage: $('stage'),
-  settings,
-  onChange: changed,
-  onSnap: () => setPaused(!state.paused),
-  onOrbitToggle: () => setPaused(!state.paused),
-  isFrozen: () => state.paused,
-  isOrbitMode: () => state.paused,
+// Setup language
+const query = new URLSearchParams(location.search);
+const hash = new URLSearchParams(location.hash.slice(1));
+let currentLang = resolveLanguage({
+  requested: query.get('lang') || hash.get('lang'),
+  preferred: navigator.languages?.length ? navigator.languages : [navigator.language],
 });
-systemsUI.dock.hidden = true;
-const trackers = createTrackers({ onStatus: text => ui.status(t(text), '', true) });
-const camera = createCamera({ video, onChange: value => {
-  state.mirror = value.mirror;
-  $('stage').classList.toggle('mirrored', state.mirror);
-  if (value.running && value.width && value.height) $('stage').style.setProperty('--ar', String(value.width / value.height));
-  lastVideoTime = -1; trackers.reset(); scene?.resize();
-}, onEnded: () => { stop(); ui.status(t('攝影機連線已中斷，請重新啟動鏡頭，或先看示範。'), 'bad'); } });
+setLanguage(currentLang);
+translateDocument(document.documentElement);
 
-const introPictures = bindIntroPictures({ pictures: [...document.querySelectorAll('.intro-picture')],
-  buttons: [...document.querySelectorAll('.intro-picture-choice button')], still: matchMedia('(prefers-reduced-motion: reduce)').matches });
-// The pictures turn over only while the start screen is the thing being looked at.
-function syncIntroPictures() { if (state.mode === 'intro' && !document.hidden) introPictures.start(); else introPictures.stop(); }
-// The entrance plays for the first visit to the start screen only, never again after a session.
-function showIntro(visible) { $('intro').hidden = !visible; if (!visible) $('intro').classList.remove('enter'); if (systemsUI) systemsUI.dock.hidden = visible; syncIntroPictures(); }
-function bodyOn() { return BODY_LAYERS.some(key => settings[key]); }
-function syncDemoAspect() {
-  if (state.mode !== 'demo') return;
-  const portrait = matchMedia('(max-width:600px) and (orientation:portrait)').matches;
-  $('stage').style.setProperty('--ar', String(demoStageAspect({ portrait, body: bodyOn() })));
-  scene?.resize();
+const langToggle = document.getElementById('language-toggle');
+if (langToggle) {
+  langToggle.textContent = currentLang === 'zh-Hant' ? 'English' : '中文';
+  langToggle.addEventListener('click', () => {
+    const nextLang = currentLang === 'zh-Hant' ? 'en' : 'zh-Hant';
+    const url = new URL(location.href);
+    url.searchParams.set('lang', nextLang);
+    location.href = url.toString();
+  });
 }
-function needs(performance = state.performance) {
-  // The hands stay tracked in a region that does not draw them: they are what tells a body from the
-  // small figure the pose model sees in a close hand.
-  const hand = settings.hands || settings.reveal === 'lens' || settings.showdata;
-  let pose = bodyOn();
-  // Lite mode gives the body up for the fingertip lens. Otherwise it keeps both: the hands, tracked more
-  // slowly there, are what tells a body from the small figure the pose model sees in a close hand.
-  if (performance === 'lite' && hand && pose && settings.reveal === 'lens') pose = false;
-  return { face: ['skull', 'brain', 'muscles', 'eyes', 'outline', 'nerves'].some(key => layerShown(settings, key)) || settings.showdata,
-    hands: hand, pose, mask: pose && performance !== 'lite', performance };
-}
-// Everything the trackers, the camera profile and the anatomy bundles depend on. Brightness, fit,
-// cut position and the other appearance controls are deliberately absent.
-function sessionKey() {
-  return JSON.stringify([state.mode, needs(settings.performance === 'auto' ? state.performance : settings.performance), LAYERS.map(key => settings[key])]);
-}
-async function getScene() {
-  if (!scenePromise) scenePromise = import('./scene.js').then(({ createScene }) => createScene({ settings, state, onStats: autoPerformance })).then(result => scene = result).catch(error => { scenePromise = null; throw error; });
-  return scenePromise;
-}
-function autoPerformance(stats) {
-  const sampledAt = performance.now();
-  // A paused picture is only redrawn: its frame rate is the one measured before it froze.
-  if (state.mode !== 'live' || state.paused || settings.performance !== 'auto' || sampledAt - autoAt < 2000) return;
-  autoAt = sampledAt;
-  lowChecks = stats.fps < 18 ? lowChecks + 1 : 0;
-  if (lowChecks >= 2 && state.performance !== 'lite') {
-    state.performance = state.performance === 'high' ? 'balanced' : 'lite'; lowChecks = 0;
-    camera.setProfile(state.performance).catch(() => {});
-    changed();
-  }
-}
-// Pausing freezes the picture so a structure can be picked at leisure. In live mode one more
-// inference runs on the frozen video frame (freezeFrame), so the anatomy matches what is shown.
-let freezeFrame = false;
-function setPaused(value) {
-  const paused = !!value && state.mode !== 'intro';
-  if (paused === state.paused) return;
-  state.paused = paused;
-  const button = $('pause-toggle');
-  if (button) { button.setAttribute('aria-pressed', String(paused)); button.textContent = t(paused ? '繼續' : '暫停'); button.setAttribute('aria-label', t(paused ? '繼續畫面' : '暫停畫面')); }
-  $('stage').classList.toggle('paused', paused);
-  scene?.setFrozen(paused);
-  if (state.mode === 'live') {
-    if (paused) { video.pause(); freezeFrame = true; lastVideoTime = -1; }
-    else { freezeFrame = false; lastVideoTime = -1; autoAt = performance.now(); lowChecks = 0; video.play().catch(() => {}); }
-  }
-  if (paused) ui.status(t('畫面已暫停：拖曳可旋轉，雙指或滾輪可縮放，點一下可點選構造，雙擊還原；按「繼續」恢復。'), 'ok', true);
-  systemsUI?.sync();
-  schedule();
-}
-function schedule() { if (!raf && !document.hidden && state.mode !== 'intro' && (!state.paused || freezeFrame)) raf = requestAnimationFrame(tick); }
-function tick(now) {
-  raf = 0;
-  if (document.hidden || state.mode === 'intro' || !scene || (state.paused && !freezeFrame)) return;
-  try {
-    if (state.mode === 'demo') {
-      scene.demo(now, { still: has('still'), body: bodyOn() });
-      if (!has('still')) schedule();
+
+// DOM Elements
+const stage = document.getElementById('stage');
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingProgress = document.getElementById('loading-progress');
+const loadingText = document.getElementById('loading-text');
+
+const sidebar = document.getElementById('neuro-sidebar');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const sidebarClose = document.getElementById('sidebar-close');
+const searchInput = document.getElementById('structure-search');
+
+const inspector = document.getElementById('structure-inspector');
+const inspectorTitle = document.getElementById('inspector-title');
+const inspectorCategory = document.getElementById('inspector-category');
+const inspectorEn = document.getElementById('inspector-en');
+const inspectorDesc = document.getElementById('inspector-desc');
+const inspectorHideBtn = document.getElementById('inspector-hide-btn');
+const inspectorCloseBtn = document.getElementById('inspector-close-btn');
+
+const ghostBonesCheckbox = document.getElementById('ghost-bones-toggle');
+const silhouetteCheckbox = document.getElementById('silhouette-toggle');
+const silhouetteSlider = document.getElementById('silhouette-slider');
+
+const zoomInBtn = document.getElementById('btn-zoom-in');
+const zoomOutBtn = document.getElementById('btn-zoom-out');
+const dragModeBtn = document.getElementById('btn-drag-mode');
+const resetViewBtn = document.getElementById('btn-reset-view');
+
+let currentSelectedStructure = null;
+
+// Initialize Neuro 3D Viewer
+const viewer = createNeuroViewer({
+  container: stage,
+  onProgress: ({ percent, text, error }) => {
+    if (loadingProgress) loadingProgress.style.width = `${percent}%`;
+    if (loadingText) loadingText.textContent = t(text);
+    if (percent >= 100 && !error) {
+      setTimeout(() => {
+        if (loadingOverlay) {
+          loadingOverlay.classList.add('fade-out');
+          setTimeout(() => { loadingOverlay.hidden = true; }, 400);
+        }
+      }, 300);
+    }
+  },
+  onSelect: structure => {
+    currentSelectedStructure = structure;
+    if (!structure) {
+      if (inspector) inspector.hidden = true;
       return;
     }
-    schedule();
-    if (preparing || video.readyState < 2 || video.currentTime === lastVideoTime) return;
-    lastVideoTime = video.currentTime;
-    const wanted = needs();
-    const current = operation;
-    const freezing = freezeFrame;
-    // The frozen picture gets every tracker it needs, whatever the throttle says is due.
-    const accepted = trackers.detect(video, now, freezing ? { ...wanted, performance: 'high' } : wanted, result => {
-      if (current !== operation || state.mode !== 'live' || document.hidden || preparing || (state.paused && !freezing)) return;
-      if (freezing) freezeFrame = false;
-      scene.update({ now: performance.now(), ...result });
-    }, error => { if (current === operation && state.mode === 'live') { stop(); showError(error); } });
-    // The tracker takes one frame at a time; a refused freeze frame must be offered again.
-    if (accepted === false && freezing) lastVideoTime = -1;
-    if (now - lastFrameAt > 1000 && !state.paused) {
-      lastFrameAt = now;
-      const d = scene.getDiagnostics();
-      const msg = wanted.pose && !d.poseFound ? regionById(settings.focus)?.frame || '往後退，讓肩膀、臀部與四肢入鏡。' : d.headFound || d.poseFound ? '追蹤中，影像只在這部裝置處理。' : wanted.face ? '請面向鏡頭，讓臉部保持在光線充足的位置。' : '追蹤中。';
-      ui.status(`${t(msg)} ${state.performance === 'lite' ? t('輕量模式。') : ''}${trackingWarning}`, d.headFound || d.poseFound ? 'ok' : '', true);
+    if (!inspector) return;
+
+    const cat = CATEGORIES.find(c => c.id === structure.category);
+    if (inspectorCategory) {
+      inspectorCategory.textContent = `${cat?.icon || ''} ${currentLang === 'en' ? cat?.nameEn : cat?.nameZh}`;
+      inspectorCategory.style.borderColor = structure.color;
+      inspectorCategory.style.color = structure.color;
     }
-  } catch (error) { cancelAnimationFrame(raf); raf = 0; stop(); showError(error); }
+    if (inspectorTitle) inspectorTitle.textContent = currentLang === 'en' ? structure.nameEn : structure.nameZh;
+    if (inspectorEn) inspectorEn.textContent = structure.nameEn;
+    if (inspectorDesc) inspectorDesc.textContent = currentLang === 'en' ? structure.descEn : structure.descZh;
+
+    inspector.hidden = false;
+  },
+});
+
+// Inspector Actions
+if (inspectorCloseBtn) {
+  inspectorCloseBtn.addEventListener('click', () => {
+    viewer.selectStructure(null);
+  });
 }
-async function changed({ throwOnError = false, force = false } = {}) {
-  scene?.reconcileLoads();
-  if (freezeFrame) lastVideoTime = -1;
-  // Only a change in what is tracked invalidates the frame being tracked. Resetting on every step
-  // of a slider discarded each result for as long as the control was dragged. A tracker that
-  // failed to load is offered again, no more often than its own retry delay.
-  const key = sessionKey(), retry = !!trackingWarning && performance.now() - preparedAt >= 10000;
-  if (force || retry || key !== preparedFor) {
-    preparedFor = key; preparedAt = performance.now();
-    trackers.reset(); pendingChange = true;
-  }
-  const current = operation;
-  if (pendingChange && !changeTask) {
-    preparing = true;
-    changeTask = (async () => {
-      while (pendingChange) {
-        pendingChange = false;
-        if (settings.performance !== 'auto' && settings.performance !== state.performance) {
-          state.performance = settings.performance;
-          await camera.setProfile(state.performance).catch(() => {});
-        }
-        if (scene && bodyOn()) {
-          try { await scene.ensureBody(); } catch (error) { if (bodyOn()) throw error; }
-        }
-        if (state.mode === 'live') {
-          const wanted = needs(), prepared = await trackers.prepare(wanted);
-          trackingWarning = prepared.failures.map(({ name }) => t({ face: '臉部追蹤暫停。', hands: '手部追蹤暫停。', pose: '身體追蹤暫停。' }[name])).join(getLanguage() === 'en' ? ' ' : '');
-          if (prepared.failures.length && !prepared.loaded.some(name => wanted[name])) throw new Error('所需追蹤模型無法載入，請確認網路後重試');
-        }
+
+if (inspectorHideBtn) {
+  inspectorHideBtn.addEventListener('click', () => {
+    if (currentSelectedStructure) {
+      const checkbox = document.querySelector(`input[data-structure-id="${currentSelectedStructure.id}"]`);
+      if (checkbox) checkbox.checked = false;
+      viewer.toggleStructure(currentSelectedStructure.id, false);
+      viewer.selectStructure(null);
+    }
+  });
+}
+
+// Build Sidebar Checklist UI
+const structureListContainer = document.getElementById('structure-hierarchy');
+if (structureListContainer) {
+  structureListContainer.innerHTML = '';
+
+  for (const cat of CATEGORIES) {
+    if (cat.id === 'silhouette') continue; // Handled separately in top section
+
+    const catStructures = STRUCTURES.filter(s => s.category === cat.id);
+    if (catStructures.length === 0) continue;
+
+    const groupSection = document.createElement('section');
+    groupSection.className = 'category-group';
+    groupSection.setAttribute('data-category', cat.id);
+
+    // Category Header
+    const groupHeader = document.createElement('div');
+    groupHeader.className = 'category-header';
+
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'category-title';
+    titleDiv.innerHTML = `<span class="cat-icon">${cat.icon}</span> <span class="cat-name">${currentLang === 'en' ? cat.nameEn : cat.nameZh}</span>`;
+
+    const groupActions = document.createElement('div');
+    groupActions.className = 'group-actions';
+
+    const btnAll = document.createElement('button');
+    btnAll.type = 'button';
+    btnAll.className = 'mini-btn';
+    btnAll.textContent = currentLang === 'en' ? 'All' : '全選';
+    btnAll.addEventListener('click', () => {
+      for (const s of catStructures) {
+        const cb = document.querySelector(`input[data-structure-id="${s.id}"]`);
+        if (cb) cb.checked = true;
+        viewer.toggleStructure(s.id, true);
       }
-    })();
-  }
-  const task = changeTask;
-  try {
-    await task;
-    syncDemoAspect();
-    systemsUI?.sync();
-    if (state.paused) scene?.refresh();
-    else if (state.mode === 'demo') scene?.demo(performance.now(), { still: has('still'), body: bodyOn() });
-    schedule();
-    return true;
-  } catch (error) { preparedFor = null; if (current === operation) showError(error); if (throwOnError) throw error; return false; }
-  finally { if (changeTask === task) { preparing = false; changeTask = null; } }
-}
-async function start() {
-  setPaused(false);
-  if (!isSecureContext) { ui.status(t('需要 HTTPS 才能使用攝影機，請使用安全連線開啟此網站。'), 'bad'); return; }
-  const current = ++operation;
-  cancelAnimationFrame(raf); raf = 0;
-  $('start').disabled = true; $('demo-start').disabled = true;
-  ui.status(t('正在啟動攝影機…'));
-  try {
-    // Answering the permission prompt is the slow step and needs nothing from the scene.
-    getScene().catch(() => {});
-    const running = await camera.start('user', state.performance);
-    if (!running || current !== operation) return;
-    await getScene();
-    if (current !== operation) return;
-    state.mode = 'live'; showIntro(false);
-    await changed({ throwOnError: true, force: true });
-    if (current === operation) schedule();
-  } catch (error) { if (current === operation) { camera.stop(); state.mode = 'intro'; showIntro(true); showError(error); } }
-  finally { if (current === operation) { $('start').disabled = false; $('demo-start').disabled = false; } }
-}
-async function demo() {
-  setPaused(false);
-  const current = ++operation;
-  camera.stop(); cancelAnimationFrame(raf); raf = 0;
-  state.mirror = !has('rear'); state.mode = 'demo';
-  syncDemoAspect();
-  $('demo-start').disabled = true;
-  try {
-    await getScene();
-    if (current !== operation) return;
-    if (bodyOn()) await scene.ensureBody();
-    if (current !== operation) return;
-    showIntro(false);
-    ui.status(t('示範模式，沒有使用攝影機。'), 'ok');
-    scene.resize(); schedule();
-  } catch (error) { if (current === operation) { state.mode = 'intro'; showIntro(true); showError(error); } }
-  finally { if (current === operation) $('demo-start').disabled = false; }
-}
-async function switchCamera() {
-  setPaused(false);
-  if (state.mode === 'demo') { state.mirror = !state.mirror; scene?.demo(performance.now(), { still: has('still'), body: bodyOn() }); return; }
-  if (state.mode !== 'live') { ui.status(t('請先啟動鏡頭，再切換前後鏡頭。')); return; }
-  const current = operation;
-  $('camera-switch').disabled = $('camera-switch-mobile').disabled = true;
-  try {
-    await camera.switch();
-    if (current === operation && state.mode === 'live' && camera.getDiagnostics().running) { scene?.resize(); await changed({ force: true }); }
-  }
-  catch (error) {
-    if (current === operation) {
-      if (state.mode === 'live' && camera.getDiagnostics().running) await changed({ force: true });
-      showError(error);
+    });
+
+    const btnNone = document.createElement('button');
+    btnNone.type = 'button';
+    btnNone.className = 'mini-btn';
+    btnNone.textContent = currentLang === 'en' ? 'None' : '全關';
+    btnNone.addEventListener('click', () => {
+      for (const s of catStructures) {
+        const cb = document.querySelector(`input[data-structure-id="${s.id}"]`);
+        if (cb) cb.checked = false;
+        viewer.toggleStructure(s.id, false);
+      }
+    });
+
+    groupActions.appendChild(btnAll);
+    groupActions.appendChild(btnNone);
+    groupHeader.appendChild(titleDiv);
+    groupHeader.appendChild(groupActions);
+    groupSection.appendChild(groupHeader);
+
+    // Item List
+    const itemsList = document.createElement('ul');
+    itemsList.className = 'structure-items';
+
+    for (const item of catStructures) {
+      const li = document.createElement('li');
+      li.className = 'structure-item';
+      li.setAttribute('data-search-text', `${item.nameZh} ${item.nameEn}`.toLowerCase());
+
+      const label = document.createElement('label');
+      label.className = 'structure-label';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.setAttribute('data-structure-id', item.id);
+      cb.addEventListener('change', () => {
+        viewer.toggleStructure(item.id, cb.checked);
+      });
+
+      const colorDot = document.createElement('span');
+      colorDot.className = 'color-dot';
+      colorDot.style.backgroundColor = item.color;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'structure-name';
+      nameSpan.textContent = currentLang === 'en' ? item.nameEn : item.nameZh;
+
+      const focusBtn = document.createElement('button');
+      focusBtn.type = 'button';
+      focusBtn.className = 'item-focus-btn';
+      focusBtn.title = currentLang === 'en' ? 'Select & Inspect' : '選取並查看';
+      focusBtn.setAttribute('aria-label', currentLang === 'en' ? `Select ${item.nameEn}` : `選取 ${item.nameZh}`);
+      focusBtn.innerHTML = '🔍';
+      focusBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        viewer.selectStructure(item.id);
+      });
+
+      label.appendChild(cb);
+      label.appendChild(colorDot);
+      label.appendChild(nameSpan);
+      li.appendChild(label);
+      li.appendChild(focusBtn);
+      itemsList.appendChild(li);
     }
+
+    groupSection.appendChild(itemsList);
+    structureListContainer.appendChild(groupSection);
   }
-  finally { $('camera-switch').disabled = $('camera-switch-mobile').disabled = false; }
 }
-function stop() {
-  setPaused(false);
-  const fromDemo = state.mode === 'demo';
-  operation++; state.mode = 'intro'; camera.stop(); cancelAnimationFrame(raf); raf = 0;
-  scene?.clear();
-  $('start').disabled = false; $('demo-start').disabled = false;
-  showIntro(true); ui.status(t(fromDemo ? '已回到首頁。你可以啟動鏡頭，或再看一次示範。' : '鏡頭已停止。你可以重新啟動或觀看示範。'));
+
+// Search Filter
+if (searchInput) {
+  searchInput.addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    const items = document.querySelectorAll('.structure-item');
+    for (const item of items) {
+      const match = !q || item.getAttribute('data-search-text')?.includes(q);
+      item.hidden = !match;
+    }
+  });
 }
-function showError(error) {
-  const text = error?.name === 'NotAllowedError' ? t('攝影機權限未開啟。請在瀏覽器允許相機，再按啟動鏡頭。') : error?.name === 'NotFoundError' ? t('找不到可用的攝影機，仍可使用示範模式。') : `${t('無法完成操作：')}${t(error?.message || String(error))}${t('。可重新嘗試。')}`;
-  ui.status(text, 'bad', true);
-}
-document.addEventListener('visibilitychange', () => {
-  syncIntroPictures();
-  if (document.hidden) { cancelAnimationFrame(raf); raf = 0; trackers.reset(); }
-  else {
-    lastVideoTime = -1; autoAt = performance.now(); lowChecks = 0;
-    if (state.mode === 'live') changed({ force: true }); else { trackers.reset(); schedule(); }
-  }
+
+// Preset Buttons
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const preset = btn.getAttribute('data-preset');
+    viewer.applyPreset(preset);
+
+    // Sync all checkboxes
+    document.querySelectorAll('input[data-structure-id]').forEach(cb => {
+      const id = cb.getAttribute('data-structure-id');
+      cb.checked = viewer.isStructureVisible(id);
+    });
+
+    if (ghostBonesCheckbox) {
+      ghostBonesCheckbox.checked = viewer.getGhostBones();
+    }
+  });
 });
-window.addEventListener('pagehide', () => { stop(); trackers.dispose(); scene?.dispose(); });
-window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
-video.addEventListener('resize', () => {
-  if (video.videoWidth && video.videoHeight) $('stage').style.setProperty('--ar', String(video.videoWidth / video.videoHeight));
-  scene?.resize();
-});
-window.addEventListener('resize', syncDemoAspect);
-$('stage').addEventListener('pausetoggle', () => setPaused(!state.paused));
-$('stage').addEventListener('gohome', stop);
-if (import.meta.env.DEV) {
-  window.__ANATOMY_DIAGNOSTICS__ = () => ({ state: { ...state }, renderer: scene?.getDiagnostics() || null, camera: camera.getDiagnostics(), trackers: trackers.getDiagnostics(), inferenceMeanMs: trackers.getDiagnostics().inferenceMeanMs });
-  window.__ANATOMY_APP__ = { demo, start, stop, switchCamera, setPaused, settings, changed, inspectionProbe:query=>scene?.inspectionProbe(query) };
+
+// Ghost Bones Toggle
+if (ghostBonesCheckbox) {
+  ghostBonesCheckbox.addEventListener('change', () => {
+    viewer.setGhostBones(ghostBonesCheckbox.checked);
+  });
 }
-if (has('body')) { applyPreset(settings, 'full'); ui.sync(); }
-if (has('bodyMuscles')) { applyPreset(settings, 'bodyMuscles'); ui.sync(); }
-if (has('nervous')) { applyPreset(settings, 'nervous'); ui.sync(); }
-if (has('systems')) { applyPreset(settings, 'systems'); ui.sync(); }
-if (has('focus')) { applyFocus(settings, hash.get('focus') || query.get('focus')); ui.sync(); }
-if (has('peripheral')) { settings.peripheralNerves = true; ui.sync(); }
-if (has('demo')) demo(); else syncIntroPictures();
+
+// Silhouette Controls
+if (silhouetteCheckbox) {
+  silhouetteCheckbox.addEventListener('change', () => {
+    viewer.toggleStructure('silhouetteMesh', silhouetteCheckbox.checked);
+  });
+}
+
+if (silhouetteSlider) {
+  silhouetteSlider.addEventListener('input', e => {
+    const val = parseFloat(e.target.value);
+    viewer.setSilhouetteOpacity(val);
+  });
+}
+
+// Navigation & Camera Preset Buttons
+document.querySelectorAll('.view-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const viewKey = btn.getAttribute('data-view');
+    viewer.setView(viewKey);
+  });
+});
+
+if (zoomInBtn) zoomInBtn.addEventListener('click', () => viewer.zoomIn());
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => viewer.zoomOut());
+if (resetViewBtn) resetViewBtn.addEventListener('click', () => viewer.setView('default'));
+
+if (dragModeBtn) {
+  dragModeBtn.addEventListener('click', () => {
+    const current = viewer.getDragMode();
+    const next = current === 'orbit' ? 'pan' : 'orbit';
+    viewer.setDragMode(next);
+    dragModeBtn.classList.toggle('active', next === 'pan');
+    dragModeBtn.title = next === 'pan'
+      ? (currentLang === 'en' ? 'Mode: Pan (Drag to move)' : '模式：平移（拖曳移動視角）')
+      : (currentLang === 'en' ? 'Mode: Orbit (Drag to rotate)' : '模式：旋轉（拖曳環視視角）');
+  });
+}
+
+// Sidebar Mobile Toggle
+if (sidebarToggle && sidebar) {
+  sidebarToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('open');
+  });
+}
+
+if (sidebarClose && sidebar) {
+  sidebarClose.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+  });
+}
