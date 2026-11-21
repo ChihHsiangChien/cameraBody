@@ -99,4 +99,47 @@ test.describe('Human Anatomy 3D Organ System Pages', () => {
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+
+  test('toggles structure control panel visibility on desktop and mobile', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#loading-overlay.fade-out', { state: 'attached', timeout: 25000 });
+
+    const sidebar = page.locator('#neuro-sidebar');
+    const toggleBtn = page.locator('#sidebar-toggle');
+    const closeBtn = page.locator('#sidebar-close');
+
+    // Desktop default: open
+    await expect(sidebar).toHaveClass(/open/);
+    await expect(sidebar).not.toHaveClass(/collapsed/);
+    await expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggleBtn).toHaveClass(/active/);
+
+    // Toggle to hide
+    await toggleBtn.click();
+    await expect(sidebar).toHaveClass(/collapsed/);
+    await expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggleBtn).not.toHaveClass(/active/);
+
+    // Toggle to show again
+    await toggleBtn.click();
+    await expect(sidebar).toHaveClass(/open/);
+    await expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+
+    // Close via close button in panel header
+    await closeBtn.click();
+    await expect(sidebar).toHaveClass(/collapsed/);
+    await expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+
+    // Mobile view test
+    await page.setViewportSize({ width: 375, height: 667 });
+    await expect(sidebar).toHaveClass(/collapsed/);
+
+    await toggleBtn.click();
+    await expect(sidebar).toHaveClass(/open/);
+    await expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+
+    await closeBtn.click();
+    await expect(sidebar).toHaveClass(/collapsed/);
+    await expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+  });
 });

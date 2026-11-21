@@ -1048,6 +1048,13 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
   }
   window.addEventListener('resize', onResize);
 
+  const resizeObserver = typeof ResizeObserver !== 'undefined'
+    ? new ResizeObserver(() => onResize())
+    : null;
+  if (resizeObserver) {
+    resizeObserver.observe(container);
+  }
+
   let animationFrameId = 0;
   function animate() {
     animationFrameId = requestAnimationFrame(animate);
@@ -1236,9 +1243,12 @@ export function createNeuroViewer({ container, lang = 'zh-Hant', initialPage = '
 
     selectStructure,
 
+    resize: onResize,
+
     dispose() {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', onResize);
+      if (resizeObserver) resizeObserver.disconnect();
       el.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);

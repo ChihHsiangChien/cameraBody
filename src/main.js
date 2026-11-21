@@ -472,15 +472,79 @@ if (dragModeBtn) {
   });
 }
 
-// Sidebar Mobile Toggle
+// Sidebar Toggle (Desktop Collapse & Mobile Drawer)
+function isSidebarOpen() {
+  if (!sidebar) return false;
+  if (window.innerWidth <= 900) {
+    return sidebar.classList.contains('open');
+  }
+  return !sidebar.classList.contains('collapsed');
+}
+
+function updateSidebarToggleState(open) {
+  if (!sidebarToggle) return;
+  sidebarToggle.classList.toggle('active', open);
+  sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  const labelKey = open ? '關閉控制面板' : '開啟控制面板';
+  sidebarToggle.setAttribute('aria-label', t(labelKey));
+  sidebarToggle.title = t(labelKey);
+}
+
+function setSidebarOpen(open) {
+  if (!sidebar) return;
+  if (window.innerWidth <= 900) {
+    sidebar.classList.toggle('open', open);
+    sidebar.classList.toggle('collapsed', !open);
+  } else {
+    sidebar.classList.toggle('collapsed', !open);
+    sidebar.classList.toggle('open', open);
+  }
+  updateSidebarToggleState(open);
+
+  if (viewer?.resize) {
+    viewer.resize();
+  }
+}
+
+function toggleSidebar() {
+  setSidebarOpen(!isSidebarOpen());
+}
+
 if (sidebarToggle && sidebar) {
   sidebarToggle.addEventListener('click', () => {
-    sidebar.classList.toggle('open');
+    toggleSidebar();
   });
 }
 
 if (sidebarClose && sidebar) {
   sidebarClose.addEventListener('click', () => {
-    sidebar.classList.remove('open');
+    setSidebarOpen(false);
   });
 }
+
+if (sidebar) {
+  sidebar.addEventListener('transitionend', (e) => {
+    if (e.propertyName === 'margin-right' || e.propertyName === 'transform') {
+      if (viewer?.resize) {
+        viewer.resize();
+      } else {
+        window.dispatchEvent(new Event('resize'));
+      }
+    }
+  });
+}
+
+// Initial state sync based on viewport
+const initialSidebarOpen = window.innerWidth > 900;
+setSidebarOpen(initialSidebarOpen);
+
+let prevWidth = window.innerWidth;
+window.addEventListener('resize', () => {
+  const currentWidth = window.innerWidth;
+  if (prevWidth > 900 && currentWidth <= 900) {
+    setSidebarOpen(false);
+  } else if (prevWidth <= 900 && currentWidth > 900) {
+    setSidebarOpen(true);
+  }
+  prevWidth = currentWidth;
+});
